@@ -1,0 +1,21 @@
+Project: Commerce Plus – Cloud-Based E-Commerce Platform (AWS)
+Date: 19-02-2026
+👥 Attendees
+•	Humsika
+•	Subani
+•	Sahasra
+•	Tanmai
+•	Harshith
+•	Mokshagna
+•	Sindhu
+
+We also discussed additional features like payment gateway integration, admin dashboard management, user order tracking, and performance monitoring using AWS services for future improvements.
+We defined the MVP (Minimum Viable Product) to include user authentication, product management, basic shopping cart functionality, and deployment on AWS (EC2 + RDS + S3).
+We decided to implement payment integration, advanced analytics, and auto-scaling features in later sprints.
+We prioritized features into  (user authentication, product CRUD operations, AWS deployment, database integration),  (shopping cart logic, order management, S3 image storage), and L(advanced analytics, auto-scaling, monitoring dashboards).
+The Product Owner clearly explained the project scope, cloud architecture, and AWS service usage to ensure everyone understood the goals and responsibilities.
+The team agreed on the finalized backlog items after discussion.
+We selected high-priority features such as authentication module, database setup, and initial AWS deployment for Sprint 1.
+These selected items will be moved into the Sprint Backlog.
+We confirmed that the backlog will be reviewed and updated after each sprint to track progress and incorporate improvements.
+
