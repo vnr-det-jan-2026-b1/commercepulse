@@ -1,0 +1,32 @@
+# Web framework
+fastapi==0.110.0
+uvicorn[standard]==0.27.1
+python-multipart==0.0.9
+
+# Database
+sqlalchemy[asyncio]==2.0.28
+asyncpg==0.29.0
+psycopg2-binary==2.9.9
+pgvector==0.2.5
+
+# Excel ingestion
+pandas==2.2.1
+openpyxl==3.1.2
+numpy==1.26.4
+
+# AI / Embeddings
+# NOTE: torch (CPU-only) is installed separately in Dockerfile BEFORE this file
+# to prevent pip from resolving the GPU/CUDA variant (~3GB).
+sentence-transformers==2.6.1
+
+# Background tasks — Celery + Redis
+celery[redis]==5.3.6
+redis==5.0.3
+
+# Validation + settings
+pydantic==2.6.3
+pydantic-settings==2.2.1
+python-dotenv==1.0.1
+
+# Serialization
+orjson==3.9.15
