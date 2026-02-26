@@ -1,0 +1,30 @@
+
+Goal: Convert seller data into insights and smart product recommendations to improve sales.
+Member: A
+Task Title: Analytics Pipeline
+Responsibilities:
+• Process and clean sales data from database
+• Generate KPIs (revenue, top products, trends)
+Success Metric:
+KPIs are correctly calculated from test data
+Member: B
+Task Title: Recommendation Engine
+Responsibilities:
+• Build product recommendation logic
+• Use user behavior or product similarity
+Success Metric:
+Relevant products are suggested for input data
+Member:C
+Task Title: API Development
+Responsibilities:
+• Create APIs for analytics and recommendations
+• Connect backend with frontend
+Success Metric:
+APIs return correct data with low response time
+Member:D
+Task Title: Dashboard UI
+Responsibilities:
+• Design charts and graphs for insights
+• Display recommendations to sellers
+Success Metric:
+Dashboard shows clear and dynamic insights
