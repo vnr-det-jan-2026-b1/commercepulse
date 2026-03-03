@@ -16,10 +16,10 @@ def run_simulation():
     print("🚀 COMMERCEPULSE: INITIALIZING SIMULATION")
     print("================================================")
     
-    # Check if OpenAI key exists, otherwise agents will fail
-    if not os.getenv("OPENAI_API_KEY"):
-        print("❌ ERROR: OPENAI_API_KEY is not set in the environment.")
-        print("Please create a .env file in AZURE/ai_agents/ with your key.")
+    # Check if Groq API key exists, otherwise agents will fail
+    if not os.getenv("GROQ_API_KEY"):
+        print("❌ ERROR: GROQ_API_KEY is not set in the environment.")
+        print("Please create a .env file in AZURE/ai_agents/ with your free Groq key.")
         return
         
     print("✅ API Key found. Building mock state...\n")
