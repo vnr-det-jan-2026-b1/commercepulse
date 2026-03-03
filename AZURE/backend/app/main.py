@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.db.session import engine
 from app.core.config import settings
-from app.routes import upload, analytics, ai, sellers, tasks
+from app.routes import upload, analytics, ai, sellers, tasks, websockets
 
 
 # ── Lifespan (startup / shutdown) ─────────────────────────────
@@ -22,6 +22,15 @@ async def lifespan(app: FastAPI):
         await embedding_service.preload()
     except Exception as exc:
         print(f"[WARNING] Could not preload embedding model: {exc}")
+        
+    # Initialize Redis caching
+    from fastapi_cache import FastAPICache
+    from fastapi_cache.backends.redis import RedisBackend
+    import redis.asyncio as aioredis
+    
+    redis_client = aioredis.from_url(settings.REDIS_URL, encoding="utf-8", decode_responses=False)
+    FastAPICache.init(RedisBackend(redis_client), prefix="fastapi-cache")
+        
     yield
     await engine.dispose()
 
@@ -46,6 +55,7 @@ app.add_middleware(
 )
 
 # ── Routers ───────────────────────────────────────────────────
+app.include_router(websockets.router, tags=["WebSockets"])
 app.include_router(sellers.router,   prefix="/sellers",   tags=["Sellers"])
 app.include_router(upload.router,    prefix="/upload",    tags=["Excel Upload"])
 app.include_router(analytics.router, prefix="/analytics", tags=["Analytics"])
