@@ -133,9 +133,49 @@ def auto_embed(self, seller_id: str, snap_date: str):
         auto_embed.delay(seller_id, snap_date)
     """
     try:
+        # Publish "Task Started"
+        import redis
+        from app.core.config import settings
+        import json
+        r = redis.from_url(settings.REDIS_URL, decode_responses=True)
+        r.publish(f"channel:{seller_id}", json.dumps({"event": "embedding_started", "message": f"Embedding products for {snap_date}..."}))
+        
         logger.info("[Celery] auto_embed started seller=%s date=%s", seller_id, snap_date)
         count = asyncio.run(_run_embed(seller_id, snap_date))
         logger.info("[Celery] auto_embed done embedded=%d", count)
+        
+        # Publish "Embedding Complete"
+        r.publish(f"channel:{seller_id}", json.dumps({"event": "embedding_complete", "message": f"Successfully embedded {count} products.", "count": count}))
+
+        # Trigger AI Agent simulation automatically after embedding
+        from app.services.ai_agent_client import trigger_simulation
+        try:
+            r.publish(f"channel:{seller_id}", json.dumps({"event": "ai_started", "message": "Triggering AI Board of Directors..."}))
+            logger.info("[Celery] Triggering AI multi-agent simulation for seller=%s", seller_id)
+            # Create a simple snapshot summary payload
+            snapshot_data = {"event": "auto_embed_complete", "date": snap_date, "embedded_count": count}
+            
+            # Use a slightly older date for time_window_start as a default
+            from datetime import date as _date, timedelta
+            end_date = _date.fromisoformat(snap_date)
+            start_date = end_date - timedelta(days=7)
+            
+            ai_result = asyncio.run(trigger_simulation(
+                seller_id=seller_id,
+                time_window_start=str(start_date),
+                time_window_end=str(end_date),
+                snapshot_data=snapshot_data
+            ))
+            if ai_result:
+                logger.info("[Celery] AI Simulation triggered successfully: %s", ai_result.get("status"))
+                r.publish(f"channel:{seller_id}", json.dumps({"event": "ai_complete", "message": "Executive plan ready.", "result": "success"}))
+            else:
+                logger.warning("[Celery] AI Simulation triggered but returned no valid result.")
+                r.publish(f"channel:{seller_id}", json.dumps({"event": "ai_error", "message": "AI failed to generate plan."}))
+        except Exception as ai_exc:
+            logger.error("[Celery] Failed to trigger AI Simulation: %s", ai_exc)
+            r.publish(f"channel:{seller_id}", json.dumps({"event": "ai_error", "message": str(ai_exc)}))
+
         return {"status": "ok", "embedded": count, "seller_id": seller_id, "date": snap_date}
     except Exception as exc:
         logger.error("[Celery] auto_embed error: %s", exc, exc_info=True)
@@ -213,6 +253,63 @@ def nightly_embed_all():
             except Exception as e:
                 logger.error("[Celery] nightly embed failed seller=%s: %s", sid, e)
                 results.append({"seller_id": sid, "error": str(e)})
+        return results
+
+    return asyncio.run(_run())
+
+# ── Task 4: Weekly AI Action Plan (Health Check) ───────────────
+@shared_task(
+    name="app.services.tasks.weekly_health_check",
+    queue="embed",
+)
+def weekly_health_check():
+    """
+    Scheduled by Celery Beat at 8:00 AM IST every Monday.
+    Scans the database for all active sellers and triggers the AI Board of Directors
+    to generate an Executive Action Plan for the previous week's performance.
+    """
+    async def _run():
+        from sqlalchemy import text
+        from datetime import date as _date, timedelta
+        from app.db.session import AsyncSessionLocal
+        from app.services.ai_agent_client import trigger_simulation
+
+        today = _date.today()
+        start_date = today - timedelta(days=7)
+        end_date = today - timedelta(days=1)
+        
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(text("SELECT seller_id FROM sellers"))
+            seller_ids = [str(row.seller_id) for row in result.fetchall()]
+
+        logger.info("[Celery] weekly_health_check: Triggering AI for %d sellers", len(seller_ids))
+        results = []
+        for sid in seller_ids:
+            try:
+                # Mock a generic snapshot payload indicating this is a scheduled summary
+                snapshot_data = {
+                    "event": "weekly_scheduled_review", 
+                    "date_range": f"{start_date} to {end_date}",
+                    "context": "Automated weekly board review."
+                }
+                
+                ai_result = await trigger_simulation(
+                    seller_id=sid,
+                    time_window_start=str(start_date),
+                    time_window_end=str(end_date),
+                    snapshot_data=snapshot_data
+                )
+                
+                if ai_result and ai_result.get("status") == "success":
+                    logger.info("[Celery] Weekly AI Plan generated successfully for seller=%s", sid)
+                    results.append({"seller_id": sid, "status": "success"})
+                else:
+                    logger.warning("[Celery] Weekly AI Plan failed for seller=%s", sid)
+                    results.append({"seller_id": sid, "status": "failed"})
+            except Exception as e:
+                logger.error("[Celery] weekly_health_check failed for seller=%s: %s", sid, e)
+                results.append({"seller_id": sid, "error": str(e)})
+                
         return results
 
     return asyncio.run(_run())

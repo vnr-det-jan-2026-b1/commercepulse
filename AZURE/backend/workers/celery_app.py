@@ -42,5 +42,9 @@ celery_app.conf.update(
             "task": "app.services.tasks.nightly_embed_all",
             "schedule": crontab(hour=2, minute=0),  # 2:00 AM IST daily
         },
+        "weekly-ai-health-check": {
+            "task": "app.services.tasks.weekly_health_check",
+            "schedule": crontab(hour=8, minute=0, day_of_week=1),  # 8:00 AM IST every Monday
+        },
     },
 )
