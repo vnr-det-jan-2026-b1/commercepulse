@@ -43,6 +43,14 @@ class MarketInsights(BaseModel):
     churn_risk_probability: float = Field(description="Probability (0.0 to 1.0) of increased customer churn")
     recommended_actions: List[ActionItem] = Field(description="Brand-approved actions to correct sentiment or market positioning")
 
+class MarketingInsights(BaseModel):
+    """Output schema for the Marketing & Growth Intelligence Agent (CMO persona)"""
+    inefficient_ad_spend_pct: float = Field(description="Percentage of total ad spend currently yielding negative ROAS or sub-optimal conversion")
+    wasted_ad_spend_monthly: float = Field(description="Estimated monetary value of wasted or inefficient ad spend per month (in original currency)")
+    primary_traffic_bottleneck: str = Field(description="The main reason traffic isn't converting (e.g., 'Low CTR on main image', 'High bounce rate due to pricing')")
+    recommended_campaign_kills: List[str] = Field(description="Specific campaigns or keyword strategies to pause instantly to save money")
+    recommended_actions: List[ActionItem] = Field(description="CMO-approved actions to optimize ROAS, shift budget, or capture competitor traffic")
+
 
 # -------------------------------------------------------------------
 # Final Output (Synthesizer)

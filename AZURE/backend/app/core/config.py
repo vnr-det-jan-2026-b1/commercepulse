@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
     EMBEDDING_DIMS:  int = 384
 
+    # AI Agents API (runs by default on 8001 locally to avoid clash)
+    AI_AGENTS_URL: str = "http://localhost:8001"
+
     @property
     def _pw(self) -> str:
         """URL-encode the password so special chars (@ % : /) don't break the DSN."""
