@@ -9,11 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.core.security import enforce_seller_scope
 
+from fastapi_cache.decorator import cache
+
 router = APIRouter()
 
 
 # ── Revenue Summary ────────────────────────────────────────────
 @router.get("/revenue", summary="Revenue summary for a seller")
+@cache(expire=3600)  # Cache for 1 hour
 async def revenue_summary(
     seller_id: str,
     days:      int = Query(30, ge=1, le=365, description="Lookback window in days"),
@@ -248,6 +251,7 @@ async def logistics_rto_rate(
 
 # ── Executive Dashboard (single call, all KPIs) ────────────────
 @router.get("/dashboard", summary="All key metrics in one call")
+@cache(expire=3600)  # Cache for 1 hour
 async def dashboard(
     seller_id: str,
     days:      int = Query(30, ge=1, le=365),
