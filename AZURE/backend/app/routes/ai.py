@@ -131,3 +131,88 @@ async def similar_insights(
 ):
     results = await embedding_service.find_similar_insights(db, seller_id, query, limit=limit)
     return {"seller_id": seller_id, "query": query, "results": results}
+
+from app.services.ai_agent_client import trigger_simulation
+from pydantic import BaseModel
+
+class SimulateRequest(BaseModel):
+    seller_id: str
+    time_window_start: str
+    time_window_end: str
+    snapshot_data: dict
+
+@router.post("/simulate", summary="Trigger the AI multi-agent simulation")
+async def run_ai_simulation(
+    request: SimulateRequest,
+    db: AsyncSession = Depends(get_db),
+    _scope: str = Depends(enforce_seller_scope),
+):
+    """
+    Triggers the external LangGraph AI Agents API.
+    """
+    result = await trigger_simulation(
+        seller_id=request.seller_id,
+        time_window_start=request.time_window_start,
+        time_window_end=request.time_window_end,
+        snapshot_data=request.snapshot_data
+    )
+    if result and result.get("status") == "success":
+        # Store the high-level plan in the database
+        executive_plan = result.get("executive_plan", {})
+        import json
+        plan_text = json.dumps(executive_plan)
+        # Create an embedding for the AI's action plan for future context retrieval
+        await embedding_service.store_insight(
+            db=db,
+            seller_id=request.seller_id,
+            insight_text=plan_text,
+            insight_type="executive_action_plan",
+            metadata={"source": "multi_agent_simulation"}
+        )
+        return result
+    return {"status": "error", "message": "Failed to retrieve executive plan from AI agents."}
+
+from fastapi.responses import StreamingResponse
+from app.services.ai_agent_client import trigger_simulation_stream
+
+@router.post("/simulate/stream", summary="Stream the AI multi-agent simulation response")
+async def run_ai_simulation_stream(
+    request: SimulateRequest,
+    db: AsyncSession = Depends(get_db),
+    _scope: str = Depends(enforce_seller_scope),
+):
+    """
+    Triggers the LangGraph AI Agents API and streams the Synthesizer's response back to the client via SSE.
+    """
+    return StreamingResponse(
+        trigger_simulation_stream(
+            seller_id=request.seller_id,
+            time_window_start=request.time_window_start,
+            time_window_end=request.time_window_end,
+            snapshot_data=request.snapshot_data
+        ),
+        media_type="text/event-stream"
+    )
+
+from app.services.ai_agent_client import trigger_whatif_stream
+
+class WhatIfRequest(BaseModel):
+    seller_id: str
+    scenario: str
+
+@router.post("/whatif", summary="Stream a hypothetical What-If scenario through the AI Agents")
+async def run_whatif_simulation_stream(
+    request: WhatIfRequest,
+    db: AsyncSession = Depends(get_db),
+    _scope: str = Depends(enforce_seller_scope),
+):
+    """
+    Triggers the LangGraph AI Agents' What-If engine and streams the Synthesizer's response back via SSE.
+    """
+    return StreamingResponse(
+        trigger_whatif_stream(
+            seller_id=request.seller_id,
+            scenario=request.scenario
+        ),
+        media_type="text/event-stream"
+    )
