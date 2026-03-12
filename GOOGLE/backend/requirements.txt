@@ -1,0 +1,15 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+pydantic-settings==2.5.2
+google-cloud-bigquery==3.25.0
+google-cloud-storage==2.18.0
+google-cloud-pubsub==2.23.0
+google-cloud-tasks==2.16.3
+google-cloud-aiplatform==1.65.0
+vertexai==1.65.0
+google-auth==2.35.0
+redis==5.1.0
+python-multipart==0.0.12
+openpyxl==3.1.5
+pandas==2.2.3

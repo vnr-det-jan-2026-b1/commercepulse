@@ -1,0 +1,89 @@
+steps:
+  # ── 1. Build and push event-collector image ──────────────────
+  - name: "gcr.io/cloud-builders/docker"
+    id: "build-event-collector"
+    args:
+      - build
+      - -t
+      - "asia-south1-docker.pkg.dev/$PROJECT_ID/commercepulse-images/event-collector:$SHORT_SHA"
+      - -t
+      - "asia-south1-docker.pkg.dev/$PROJECT_ID/commercepulse-images/event-collector:latest"
+      - GOOGLE/event-collector
+    waitFor: ["-"]
+
+  - name: "gcr.io/cloud-builders/docker"
+    id: "push-event-collector"
+    args:
+      - push
+      - "asia-south1-docker.pkg.dev/$PROJECT_ID/commercepulse-images/event-collector:$SHORT_SHA"
+    waitFor: ["build-event-collector"]
+
+  # ── 2. Build and push API backend image ──────────────────────
+  - name: "gcr.io/cloud-builders/docker"
+    id: "build-api"
+    args:
+      - build
+      - -t
+      - "asia-south1-docker.pkg.dev/$PROJECT_ID/commercepulse-images/api:$SHORT_SHA"
+      - -t
+      - "asia-south1-docker.pkg.dev/$PROJECT_ID/commercepulse-images/api:latest"
+      - GOOGLE/backend
+    waitFor: ["-"]
+
+  - name: "gcr.io/cloud-builders/docker"
+    id: "push-api"
+    args:
+      - push
+      - "asia-south1-docker.pkg.dev/$PROJECT_ID/commercepulse-images/api:$SHORT_SHA"
+    waitFor: ["build-api"]
+
+  # ── 3. Deploy event-collector to Cloud Run ───────────────────
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "deploy-event-collector"
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - commercepulse-event-collector
+      - --image=asia-south1-docker.pkg.dev/$PROJECT_ID/commercepulse-images/event-collector:$SHORT_SHA
+      - --region=asia-south1
+      - --platform=managed
+      - --min-instances=2
+      - --max-instances=100
+      - --concurrency=1000
+      - --memory=512Mi
+      - --cpu=1
+      - --no-allow-unauthenticated
+      - --service-account=sa-cloudrun-api@$PROJECT_ID.iam.gserviceaccount.com
+      - --set-env-vars=GCP_PROJECT=$PROJECT_ID,PUBSUB_TOPIC=commercepulse-events
+    waitFor: ["push-event-collector"]
+
+  # ── 4. Deploy API backend to Cloud Run ───────────────────────
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "deploy-api"
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - commercepulse-api
+      - --image=asia-south1-docker.pkg.dev/$PROJECT_ID/commercepulse-images/api:$SHORT_SHA
+      - --region=asia-south1
+      - --platform=managed
+      - --min-instances=1
+      - --max-instances=20
+      - --memory=2Gi
+      - --cpu=2
+      - --concurrency=80
+      - --timeout=300
+      - --no-allow-unauthenticated
+      - --service-account=sa-cloudrun-api@$PROJECT_ID.iam.gserviceaccount.com
+      - --set-env-vars=GCP_PROJECT=$PROJECT_ID
+    waitFor: ["push-api"]
+
+images:
+  - "asia-south1-docker.pkg.dev/$PROJECT_ID/commercepulse-images/event-collector:$SHORT_SHA"
+  - "asia-south1-docker.pkg.dev/$PROJECT_ID/commercepulse-images/api:$SHORT_SHA"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8

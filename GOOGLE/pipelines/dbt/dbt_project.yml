@@ -1,0 +1,22 @@
+name: "commercepulse"
+version: "1.0.0"
+config-version: 2
+
+profile: "commercepulse_bq"
+
+model-paths: ["models"]
+test-paths:  ["tests"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  commercepulse:
+    bronze:
+      +materialized: incremental
+      +dataset: cp_bronze
+    silver:
+      +materialized: incremental
+      +dataset: cp_silver
+    gold:
+      +materialized: table
+      +dataset: cp_gold
