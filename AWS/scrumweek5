@@ -1,0 +1,24 @@
+What We Did Last Week
+Collected sales data from the database.
+Processed and cleaned the data by removing duplicates and fixing missing values.
+Organized the cleaned data for analysis.
+Started calculating important KPIs such as total revenue, number of sales, and top-selling products.
+Analyzed basic sales trends from the available data.
+Began developing the product recommendation logic using product similarity and user behavior.
+Tested the recommendation logic with sample product data.
+Designed the basic API structure for analytics and recommendations.
+Created initial API endpoints to retrieve analytics data and product recommendations.
+Designed the basic dashboard UI layout.
+Added sample charts and graphs to display insights like revenue and top products.
+What We Will Do Today:
+We will create Aws account for TeamProject
+Complete the calculation of KPIs such as revenue, top products, and sales trends.
+Verify that KPI values are correctly calculated using test data.
+Improve the product recommendation logic to give more relevant product suggestions.
+Test the recommendation system with different input data.
+Complete the API development for analytics and recommendation services.
+Test APIs to ensure they return correct data with low response time.
+Connect the dashboard UI with backend APIs.
+Replace sample data with real-time data from APIs.
+Improve charts and graphs for clearer insights.
+Display recommended products clearly on the dashboard for sellers.
