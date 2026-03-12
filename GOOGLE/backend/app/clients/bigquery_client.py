@@ -54,3 +54,16 @@ async def query_single(sql: str, params: dict | None = None) -> dict | None:
     """Execute a query and return the first row, or None."""
     rows = await query(sql, params)
     return rows[0] if rows else None
+
+
+def _insert_rows_sync(table_id: str, rows: list[dict]) -> None:
+    client = _get_client()
+    errors = client.insert_rows_json(table_id, rows)
+    if errors:
+        logger.error("BigQuery streaming insert errors: %s", errors)
+        raise RuntimeError(f"BigQuery insert failed: {errors}")
+
+
+async def insert_rows(table_id: str, rows: list[dict]) -> None:
+    """Stream rows into a BigQuery table."""
+    await asyncio.to_thread(_insert_rows_sync, table_id, rows)

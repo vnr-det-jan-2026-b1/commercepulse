@@ -100,3 +100,54 @@ async def logistics_rto_rate(
 ):
     rows = await bq.query(q.LOGISTICS_RTO_SQL, {"seller_id": seller_id, "days": days})
     return {"seller_id": seller_id, "period_days": days, "data": rows}
+
+
+@router.get("/storefront")
+async def storefront_analytics(
+    seller_id:   str = Query(...),
+    days:        int = Query(7, ge=1, le=90),
+    granularity: str = Query("day", pattern="^(day|hour)$"),
+    _scope:      str = Depends(enforce_seller_scope),
+):
+    params = {"seller_id": seller_id, "days": days}
+
+    if granularity == "hour":
+        hours_count = days * 24
+        traffic = await bq.query(
+            q.STOREFRONT_HOURLY_TRAFFIC_SQL,
+            {"seller_id": seller_id, "hours": hours_count},
+        )
+    else:
+        traffic = await bq.query(q.STOREFRONT_DAILY_TRAFFIC_SQL, params)
+
+    overview   = await bq.query_single(q.STOREFRONT_OVERVIEW_SQL, params)
+    products   = await bq.query(q.STOREFRONT_PRODUCTS_SQL,        params)
+    funnel_row = await bq.query_single(q.STOREFRONT_FUNNEL_SQL,   params)
+    return {
+        "seller_id":     seller_id,
+        "period_days":   days,
+        "granularity":   granularity,
+        "traffic":       traffic,
+        "overview":      overview or {},
+        "products":      products,
+        "funnel":        funnel_row or {},
+    }
+
+
+@router.get("/stock")
+async def product_stock(
+    seller_id: str = Query(...),
+    _scope:    str = Depends(enforce_seller_scope),
+):
+    rows = await bq.query(q.PRODUCT_STOCK_SQL, {"seller_id": seller_id})
+    return {"seller_id": seller_id, "products": rows}
+
+
+@router.get("/recommendations")
+async def product_recommendations(
+    seller_id: str = Query(...),
+    days:      int = Query(7, ge=1, le=90),
+    _scope:    str = Depends(enforce_seller_scope),
+):
+    rows = await bq.query(q.RECOMMENDATIONS_SQL, {"seller_id": seller_id, "days": days})
+    return {"seller_id": seller_id, "period_days": days, "recommendations": rows}

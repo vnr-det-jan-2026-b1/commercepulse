@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="ignore")
 
     # GCP
-    GCP_PROJECT: str = "commercepulse-prod"
+    GCP_PROJECT: str = "commercepulse-project"
     GCP_REGION:  str = "asia-south1"
 
     # BigQuery datasets

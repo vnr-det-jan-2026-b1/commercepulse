@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.routes import analytics, intelligence, ai, upload
+from app.routes import analytics, intelligence, ai, upload, events
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -38,6 +38,7 @@ app.add_middleware(
 )
 
 # Register routers
+app.include_router(events.router)
 app.include_router(analytics.router,    prefix="/v1")
 app.include_router(intelligence.router, prefix="/v1")
 app.include_router(ai.router,           prefix="/v1")
