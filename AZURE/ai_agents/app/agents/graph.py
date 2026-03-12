@@ -24,16 +24,13 @@ def build_commerce_pulse_engine():
     # 2. Define the exact flow
     workflow.set_entry_point("orchestrator")
     
-    # Orchestrator triggers the 4 domain agents IN PARALLEL
+    # langgraph 0.0.31 does not support parallel fan-out from a single node.
+    # Chain agents sequentially: each agent's output accumulates in the shared state,
+    # and the synthesizer receives all insights at the end.
     workflow.add_edge("orchestrator", "revenue_agent")
-    workflow.add_edge("orchestrator", "operations_agent")
-    workflow.add_edge("orchestrator", "customer_agent")
-    workflow.add_edge("orchestrator", "marketing_agent")
-    
-    # All 4 domain agents must complete before the Synthesizer triggers
-    workflow.add_edge("revenue_agent", "synthesizer")
-    workflow.add_edge("operations_agent", "synthesizer")
-    workflow.add_edge("customer_agent", "synthesizer")
+    workflow.add_edge("revenue_agent", "operations_agent")
+    workflow.add_edge("operations_agent", "customer_agent")
+    workflow.add_edge("customer_agent", "marketing_agent")
     workflow.add_edge("marketing_agent", "synthesizer")
     
     # End execution
