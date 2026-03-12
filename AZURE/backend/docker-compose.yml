@@ -1,16 +1,11 @@
-version: "3.9"
+name: commercepulse
 
 # ──────────────────────────────────────────────────────────────
-# CommercePulse — Supabase + Celery + Redis Edition
+# CommercePulse — Supabase + Celery + Redis
 #
-# Services:
-#   redis          — Message broker + Celery result backend
-#   ingestion      — FastAPI app (host network mode → reaches Supabase)
-#   celery_worker  — Processes embedding tasks from the queue
-#   celery_beat    — Schedules nightly re-embed at 2:00 AM IST
-#
-# network_mode: host is required for ingestion/celery on Windows
-# so they can reach external Supabase. Redis uses bridged network.
+# All services share the default bridge network so they can
+# reach each other by service name (e.g. redis, ai_agents).
+# Ports are mapped to the host for browser access.
 # ──────────────────────────────────────────────────────────────
 
 services:
@@ -30,12 +25,14 @@ services:
 
   # ── FastAPI — Ingestion + Analytics API ────────────────────
   ingestion:
+    image: commercepulse_ingestion
     build:
       context: .
       dockerfile: Dockerfile
     container_name: commercepulse_ingestion
     restart: unless-stopped
-    network_mode: host # ← shares host network → reaches Supabase + Redis on localhost
+    ports:
+      - "8000:8000"
     env_file:
       - .env
     environment:
@@ -46,7 +43,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Abhilash@142}
       APP_ENV: ${APP_ENV:-development}
       API_KEY: ${API_KEY:-dev-api-key}
-      REDIS_URL: redis://localhost:6379/0 # localhost because network_mode: host
+      REDIS_URL: redis://redis:6379/0
+      AI_AGENTS_URL: http://ai_agents:8001
     volumes:
       - ./app:/app/app:ro
       - model_cache:/root/.cache/huggingface
@@ -56,12 +54,12 @@ services:
 
   # ── Celery Worker — Processes Embedding Tasks ───────────────
   celery_worker:
+    image: commercepulse_worker
     build:
       context: .
       dockerfile: Dockerfile
     container_name: commercepulse_worker
     restart: unless-stopped
-    network_mode: host # ← same reason — needs to reach Supabase + Redis
     command: >
       celery -A workers.celery_app worker
         --loglevel=info
@@ -77,7 +75,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Abhilash@142}
       APP_ENV: ${APP_ENV:-development}
-      REDIS_URL: redis://localhost:6379/0
+      REDIS_URL: redis://redis:6379/0
     volumes:
       - ./app:/app/app:ro
       - ./workers:/app/workers:ro
@@ -88,12 +86,12 @@ services:
 
   # ── Celery Beat — Nightly Scheduler ────────────────────────
   celery_beat:
+    image: commercepulse_beat
     build:
       context: .
       dockerfile: Dockerfile
     container_name: commercepulse_beat
     restart: unless-stopped
-    network_mode: host
     command: >
       celery -A workers.celery_app beat
         --loglevel=info
@@ -108,13 +106,36 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Abhilash@142}
       APP_ENV: ${APP_ENV:-development}
-      REDIS_URL: redis://localhost:6379/0
+      REDIS_URL: redis://redis:6379/0
     volumes:
       - celery_beat_data:/tmp
     depends_on:
       redis:
         condition: service_healthy
 
+  # ── AI Agents — LangGraph Engine (internal only) ────────────
+  ai_agents:
+    image: commercepulse_ai_agents
+    build:
+      context: ../ai_agents
+      dockerfile: Dockerfile
+    container_name: commercepulse_ai_agents
+    restart: unless-stopped
+    env_file:
+      - ../ai_agents/.env
+    environment:
+      POSTGRES_HOST: db.gwwhksdelequvapksgqx.supabase.co
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Abhilash@142}
+      APP_ENV: ${APP_ENV:-development}
+    volumes:
+      - ../ai_agents/app:/app/app:ro
+      - ../ai_agents/main.py:/app/main.py:ro
+
 volumes:
   model_cache:
+    name: commercepulse_model_cache
   celery_beat_data:
+    name: commercepulse_beat_data

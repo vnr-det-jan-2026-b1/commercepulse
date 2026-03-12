@@ -20,8 +20,8 @@ numpy==1.26.4
 sentence-transformers==2.6.1
 
 # Background tasks — Celery + Redis
-celery[redis]==5.3.6
-redis==5.0.3
+celery[redis]>=5.3.6
+redis>=4.5.2,<5.0.0
 
 # Validation + settings
 pydantic==2.6.3
