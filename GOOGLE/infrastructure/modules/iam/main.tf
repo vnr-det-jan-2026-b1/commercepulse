@@ -38,6 +38,11 @@ resource "google_project_iam_member" "dataflow_pubsub" {
   role    = "roles/pubsub.subscriber"
   member  = "serviceAccount:${google_service_account.accounts["sa-dataflow"].email}"
 }
+resource "google_project_iam_member" "dataflow_pubsub_publisher" {
+  project = var.project_id
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${google_service_account.accounts["sa-dataflow"].email}"
+}
 
 # Cloud Run API permissions
 resource "google_project_iam_member" "cloudrun_bq_viewer" {
@@ -59,6 +64,50 @@ resource "google_project_iam_member" "cloudrun_vertex" {
   project = var.project_id
   role    = "roles/aiplatform.user"
   member  = "serviceAccount:${google_service_account.accounts["sa-cloudrun-api"].email}"
+}
+resource "google_project_iam_member" "cloudrun_pubsub_publisher" {
+  project = var.project_id
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${google_service_account.accounts["sa-cloudrun-api"].email}"
+}
+
+# Cloud Composer permissions
+resource "google_project_iam_member" "composer_worker" {
+  project = var.project_id
+  role    = "roles/composer.worker"
+  member  = "serviceAccount:${google_service_account.accounts["sa-composer"].email}"
+}
+resource "google_project_iam_member" "composer_bq_job" {
+  project = var.project_id
+  role    = "roles/bigquery.jobUser"
+  member  = "serviceAccount:${google_service_account.accounts["sa-composer"].email}"
+}
+resource "google_project_iam_member" "composer_dataflow_admin" {
+  project = var.project_id
+  role    = "roles/dataflow.admin"
+  member  = "serviceAccount:${google_service_account.accounts["sa-composer"].email}"
+}
+resource "google_project_iam_member" "composer_pubsub_subscriber" {
+  project = var.project_id
+  role    = "roles/pubsub.subscriber"
+  member  = "serviceAccount:${google_service_account.accounts["sa-composer"].email}"
+}
+
+# Cloud Functions (alerts) permissions
+resource "google_project_iam_member" "functions_bq_viewer" {
+  project = var.project_id
+  role    = "roles/bigquery.dataViewer"
+  member  = "serviceAccount:${google_service_account.accounts["sa-functions"].email}"
+}
+resource "google_project_iam_member" "functions_bq_job" {
+  project = var.project_id
+  role    = "roles/bigquery.jobUser"
+  member  = "serviceAccount:${google_service_account.accounts["sa-functions"].email}"
+}
+resource "google_project_iam_member" "functions_pubsub_publisher" {
+  project = var.project_id
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${google_service_account.accounts["sa-functions"].email}"
 }
 
 # Vertex AI pipeline permissions
