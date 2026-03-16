@@ -51,7 +51,11 @@ function App() {
       .catch(() => {});
   }
 
-  useEffect(() => { refreshStock(); }, []);
+  useEffect(() => {
+    refreshStock();
+    const interval = setInterval(refreshStock, 30_000);
+    return () => clearInterval(interval);
+  }, []);
 
   function handleAddToCart(product: Product) {
     const stock = stockMap[product.id] ?? 10;

@@ -18,3 +18,6 @@ export const fetchStock = () =>
 
 export const fetchRecommendations = (days: number) =>
   api.get('/v1/analytics/recommendations', { params: { seller_id: sellerId, days } }).then(r => r.data);
+
+export const restockProduct = (productId: string, quantity: number) =>
+  api.post('/v1/analytics/stock/restock', { seller_id: sellerId, product_id: productId, quantity }).then(r => r.data);

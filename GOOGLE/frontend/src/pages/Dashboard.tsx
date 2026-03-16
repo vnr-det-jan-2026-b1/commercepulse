@@ -3,10 +3,10 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell,
 } from 'recharts';
-import { useStorefront, useRecommendations, useStock } from '../hooks/useAnalytics';
+import { useStorefront, useRecommendations, useStock, useRestock } from '../hooks/useAnalytics';
 import type { Recommendation, StockItem } from '../types';
 
-type Tab = 'overview' | 'analytics' | 'recommendations' | 'products';
+type Tab = 'overview' | 'analytics' | 'recommendations' | 'inventory' | 'products';
 type FilterMode = '1d-hourly' | '7d' | '30d';
 
 function modeToParams(mode: FilterMode): { days: number; granularity: 'day' | 'hour' } {
@@ -27,15 +27,17 @@ const REC_META: Record<string, { dot: string; label: string; msg: string }> = {
 };
 
 // ── Icons ──────────────────────────────────────────────────────────────
-function IconOverview()  { return <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>; }
-function IconAnalytics() { return <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>; }
-function IconRecs()      { return <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>; }
-function IconProducts()  { return <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>; }
+function IconOverview()   { return <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>; }
+function IconAnalytics()  { return <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>; }
+function IconRecs()       { return <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>; }
+function IconInventory()  { return <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>; }
+function IconProducts()   { return <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>; }
 
 const NAV_ITEMS: { id: Tab; label: string; Icon: () => JSX.Element }[] = [
   { id: 'overview',        label: 'Overview',        Icon: IconOverview },
   { id: 'analytics',       label: 'Analytics',       Icon: IconAnalytics },
   { id: 'recommendations', label: 'Recommendations', Icon: IconRecs },
+  { id: 'inventory',       label: 'Stock Room',      Icon: IconInventory },
   { id: 'products',        label: 'Products',        Icon: IconProducts },
 ];
 
@@ -94,6 +96,24 @@ export default function Dashboard() {
   const [tab, setTab]   = useState<Tab>('overview');
   const [mode, setMode] = useState<FilterMode>('7d');
   const [recDays, setRecDays] = useState(7);
+  const [restockQty, setRestockQty] = useState<Record<string, number>>({});
+  const [restockDone, setRestockDone] = useState<Record<string, number>>({}); // productId → qty added
+  const [restockDismissed, setRestockDismissed] = useState<Set<string>>(new Set());
+  const restock = useRestock();
+
+  const getQty = (productId: string, fallback = 10) =>
+    restockQty[productId] ?? fallback;
+
+  const handleRestock = (productId: string) => {
+    const qty = getQty(productId);
+    if (qty < 1) return;
+    restock.mutate({ productId, quantity: qty }, {
+      onSuccess: () => setRestockDone(prev => ({ ...prev, [productId]: qty })),
+    });
+  };
+  const handleDismiss = (productId: string) => {
+    setRestockDismissed(prev => new Set([...prev, productId]));
+  };
 
   useEffect(() => {
     const t = localStorage.getItem('nova-theme') ?? 'dark';
@@ -125,9 +145,12 @@ export default function Dashboard() {
       ]
     : [];
 
-  const lowStockCount   = stock.filter(p => p.current_stock > 0 && p.current_stock <= 3).length;
-  const outOfStockCount = stock.filter(p => p.current_stock === 0).length;
-  const urgentCount     = recs.filter(r => r.recommendation === 'RESTOCK_URGENT').length;
+  const lowStockCount      = stock.filter(p => p.current_stock > 0 && p.current_stock <= 3).length;
+  const outOfStockCount    = stock.filter(p => p.current_stock === 0).length;
+  const urgentCount        = recs.filter(r => r.recommendation === 'RESTOCK_URGENT').length;
+  const criticalStockItems = stock.filter(p => p.current_stock <= 3);
+  const criticalStockCount = criticalStockItems.length;
+  const activeRestockAlerts = criticalStockItems.filter(p => !restockDismissed.has(p.product_id));
 
   const sortedRecs = [...recs].sort((a, b) =>
     REC_ORDER.indexOf(a.recommendation) - REC_ORDER.indexOf(b.recommendation)
@@ -173,6 +196,9 @@ export default function Dashboard() {
                 {id === 'recommendations' && urgentCount > 0 && (
                   <span style={{ marginLeft: 'auto', background: 'var(--danger)', color: 'white', fontSize: '10px', fontWeight: 700, borderRadius: '10px', padding: '1px 6px' }}>{urgentCount}</span>
                 )}
+                {id === 'inventory' && criticalStockCount > 0 && (
+                  <span style={{ marginLeft: 'auto', background: criticalStockCount > 0 ? 'var(--amber)' : 'transparent', color: 'white', fontSize: '10px', fontWeight: 700, borderRadius: '10px', padding: '1px 6px' }}>{criticalStockCount}</span>
+                )}
               </button>
             );
           })}
@@ -198,6 +224,7 @@ export default function Dashboard() {
               {tab === 'overview'        && 'Store performance at a glance'}
               {tab === 'analytics'       && 'Traffic and conversion funnel'}
               {tab === 'recommendations' && 'Demand-based product insights'}
+              {tab === 'inventory'       && 'Stock levels and restock management'}
               {tab === 'products'        && 'Inventory and performance metrics'}
             </p>
           </div>
@@ -382,6 +409,54 @@ export default function Dashboard() {
           {/* ── RECOMMENDATIONS ── */}
           {tab === 'recommendations' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+              {/* Low-stock restock alerts */}
+              {activeRestockAlerts.length > 0 && (
+                <div style={{ background: 'rgba(251,191,36,0.06)', border: '1px solid var(--amber)', borderRadius: '12px', padding: '16px 20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <span style={{ color: 'var(--amber)', fontSize: '8px' }}>●</span>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--amber)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Restock Alerts — {activeRestockAlerts.length} product{activeRestockAlerts.length > 1 ? 's' : ''} critically low</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {activeRestockAlerts.map(p => (
+                      <div key={p.product_id} style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', padding: '12px 16px' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.product_name}</p>
+                          <p style={{ fontSize: '11px', color: p.current_stock === 0 ? 'var(--danger)' : 'var(--amber)', margin: 0, fontWeight: 600 }}>
+                            {p.current_stock === 0 ? '● Out of stock' : `● Only ${p.current_stock} unit${p.current_stock === 1 ? '' : 's'} remaining`}
+                          </p>
+                        </div>
+                        <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: 0, flexShrink: 0 }}>{p.category}</p>
+                        {restockDone[p.product_id] ? (
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--accent)', flexShrink: 0 }}>✓ +{restockDone[p.product_id]} units ordered</span>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                            <input
+                              type="number" min={1} value={getQty(p.product_id)}
+                              onChange={e => setRestockQty(prev => ({ ...prev, [p.product_id]: Math.max(1, parseInt(e.target.value) || 1) }))}
+                              style={{ width: '56px', padding: '5px 8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--raised)', color: 'var(--text-primary)', fontSize: '12px', fontFamily: 'inherit', textAlign: 'center' }}
+                            />
+                            <button
+                              onClick={() => handleRestock(p.product_id)}
+                              disabled={restock.isPending}
+                              style={{ padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', background: 'var(--accent)', color: 'white', fontFamily: 'inherit', opacity: restock.isPending ? 0.6 : 1 }}
+                            >
+                              Restock
+                            </button>
+                            <button
+                              onClick={() => handleDismiss(p.product_id)}
+                              style={{ padding: '6px 10px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, border: '1px solid var(--border)', cursor: 'pointer', background: 'transparent', color: 'var(--text-secondary)', fontFamily: 'inherit' }}
+                            >
+                              Dismiss
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>Demand-based insights per product</p>
                 <div style={{ display: 'flex', gap: '6px' }}>
@@ -445,6 +520,183 @@ export default function Dashboard() {
                     );
                   })}
                 </div>
+              )}
+            </div>
+          )}
+
+          {/* ── INVENTORY / STOCK ROOM ── */}
+          {tab === 'inventory' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+              {/* Summary KPIs */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+                {[
+                  { n: stock.length,                                             label: 'Total Products',  color: 'var(--text-primary)' },
+                  { n: stock.filter(p => p.current_stock > 3).length,           label: 'Healthy Stock',   color: 'var(--accent)' },
+                  { n: lowStockCount,                                            label: 'Low Stock (≤3)',  color: 'var(--amber)' },
+                  { n: outOfStockCount,                                          label: 'Out of Stock',    color: 'var(--danger)' },
+                ].map(({ n, label, color }) => (
+                  <div key={label} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '18px 20px' }}>
+                    <p style={{ fontSize: '2.2rem', fontWeight: 800, color, margin: 0, lineHeight: 1, letterSpacing: '-0.04em' }}>{n}</p>
+                    <p style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', margin: '8px 0 0', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Critical: needs restocking */}
+              {criticalStockItems.length > 0 && (
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <span style={{ color: 'var(--amber)', fontSize: '8px' }}>●</span>
+                    <p style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Needs Restocking</p>
+                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>— products at 3 units or below</span>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+                    {criticalStockItems.map(p => {
+                      const isOut = p.current_stock === 0;
+                      const ordered = !!restockDone[p.product_id];
+                      return (
+                        <div key={p.product_id} style={{ background: 'var(--surface)', border: `1px solid ${isOut ? 'var(--danger)' : 'var(--amber)'}`, borderRadius: '12px', padding: '18px 20px' }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', marginBottom: '14px' }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                                <span style={{ fontSize: '7px', color: isOut ? 'var(--danger)' : 'var(--amber)' }}>●</span>
+                                <span style={{ fontSize: '10px', fontWeight: 700, color: isOut ? 'var(--danger)' : 'var(--amber)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                                  {isOut ? 'Out of Stock' : 'Low Stock'}
+                                </span>
+                              </div>
+                              <p style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.product_name}</p>
+                              <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: 0 }}>{p.category} · ₹{p.price.toLocaleString('en-IN')}</p>
+                            </div>
+                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                              <p style={{ fontSize: '2rem', fontWeight: 800, color: isOut ? 'var(--danger)' : 'var(--amber)', margin: 0, lineHeight: 1, letterSpacing: '-0.04em' }}>{p.current_stock}</p>
+                              <p style={{ fontSize: '10px', color: 'var(--text-secondary)', margin: '3px 0 0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>units left</p>
+                            </div>
+                          </div>
+
+                          <div style={{ marginBottom: '14px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Stock level</span>
+                              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{p.current_stock}/{p.initial_stock} units</span>
+                            </div>
+                            <div style={{ width: '100%', background: 'var(--raised)', borderRadius: '4px', height: '6px' }}>
+                              <div style={{
+                                background: isOut ? 'var(--danger)' : 'var(--amber)',
+                                height: '6px', borderRadius: '4px',
+                                width: `${p.initial_stock > 0 ? (p.current_stock / p.initial_stock) * 100 : 0}%`,
+                                transition: 'width 400ms ease'
+                              }} />
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{p.units_sold} sold</span>
+                            <span style={{ marginLeft: 'auto' }} />
+                            {ordered ? (
+                              <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--accent)' }}>✓ +{restockDone[p.product_id]} units ordered</span>
+                            ) : (
+                              <>
+                                <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Restock qty:</span>
+                                <input
+                                  type="number" min={1} value={getQty(p.product_id)}
+                                  onChange={e => setRestockQty(prev => ({ ...prev, [p.product_id]: Math.max(1, parseInt(e.target.value) || 1) }))}
+                                  style={{ width: '64px', padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--raised)', color: 'var(--text-primary)', fontSize: '13px', fontFamily: 'inherit', textAlign: 'center' }}
+                                />
+                                <button
+                                  onClick={() => handleRestock(p.product_id)}
+                                  disabled={restock.isPending}
+                                  style={{ padding: '7px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', background: 'var(--accent)', color: 'white', fontFamily: 'inherit', opacity: restock.isPending ? 0.6 : 1 }}
+                                >
+                                  Confirm Restock
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {criticalStockItems.length === 0 && (
+                <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '32px', textAlign: 'center' }}>
+                  <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--accent)', margin: '0 0 4px' }}>✓ All products healthy</p>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>No products are critically low on stock.</p>
+                </div>
+              )}
+
+              {/* Full stock table */}
+              {stock.length > 0 && (
+                <div>
+                  <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 12px' }}>All Products — Stock Overview</p>
+                  <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                          {['Product', 'Category', 'Price', 'Sold', 'Stock Level', 'Status', 'Action'].map(h => (
+                            <th key={h} style={{ padding: '12px 16px', textAlign: h === 'Product' ? 'left' : 'center', fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {stock.slice().sort((a: StockItem, b: StockItem) => a.current_stock - b.current_stock).map((p: StockItem, i: number) => {
+                          const isCritical = p.current_stock <= 3;
+                          const isOut = p.current_stock === 0;
+                          const ordered = !!restockDone[p.product_id];
+                          return (
+                            <tr key={p.product_id} style={{ borderBottom: '1px solid var(--border)', background: i % 2 === 1 ? 'var(--raised)' : 'transparent' }}>
+                              <td style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-primary)' }}>{p.product_name}</td>
+                              <td style={{ padding: '12px 16px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{p.category}</td>
+                              <td style={{ padding: '12px 16px', textAlign: 'center', color: 'var(--text-primary)', fontWeight: 500 }}>₹{p.price.toLocaleString('en-IN')}</td>
+                              <td style={{ padding: '12px 16px', textAlign: 'center', color: 'var(--text-secondary)' }}>{p.units_sold}</td>
+                              <td style={{ padding: '12px 16px' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                                  <StockBar current={p.current_stock} initial={p.initial_stock} />
+                                  <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>{p.current_stock}/{p.initial_stock}</span>
+                                </div>
+                              </td>
+                              <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                                <span style={{ fontSize: '12px', fontWeight: 600, color: isOut ? 'var(--danger)' : isCritical ? 'var(--amber)' : 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                                  <span style={{ fontSize: '7px' }}>●</span>
+                                  {isOut ? 'Out' : isCritical ? 'Low' : 'OK'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '10px 16px', textAlign: 'center' }}>
+                                {isCritical ? (
+                                  ordered ? (
+                                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--accent)' }}>✓ +{restockDone[p.product_id]}</span>
+                                  ) : (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}>
+                                      <input
+                                        type="number" min={1} value={getQty(p.product_id)}
+                                        onChange={e => setRestockQty(prev => ({ ...prev, [p.product_id]: Math.max(1, parseInt(e.target.value) || 1) }))}
+                                        style={{ width: '48px', padding: '4px 6px', borderRadius: '5px', border: '1px solid var(--border)', background: 'var(--raised)', color: 'var(--text-primary)', fontSize: '11px', fontFamily: 'inherit', textAlign: 'center' }}
+                                      />
+                                      <button
+                                        onClick={() => handleRestock(p.product_id)}
+                                        disabled={restock.isPending}
+                                        style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, border: 'none', cursor: 'pointer', background: 'var(--accent)', color: 'white', fontFamily: 'inherit', opacity: restock.isPending ? 0.6 : 1 }}
+                                      >
+                                        +Add
+                                      </button>
+                                    </div>
+                                  )
+                                ) : (
+                                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>—</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {stock.length === 0 && criticalStockItems.length === 0 && (
+                <div style={{ textAlign: 'center', paddingTop: '60px', color: 'var(--text-secondary)', fontSize: '14px' }}>No stock data yet.</div>
               )}
             </div>
           )}

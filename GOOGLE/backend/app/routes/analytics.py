@@ -1,11 +1,18 @@
 """Analytics routes — GET /analytics/*"""
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, Field
 
 from app.core.security import enforce_seller_scope
 from app.clients import bigquery_client as bq
 from app.services import analytics_queries as q
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
+
+
+class RestockRequest(BaseModel):
+    seller_id: str
+    product_id: str
+    quantity: int = Field(..., ge=1, le=10000)
 
 
 @router.get("/dashboard")
@@ -141,6 +148,19 @@ async def product_stock(
 ):
     rows = await bq.query(q.PRODUCT_STOCK_SQL, {"seller_id": seller_id})
     return {"seller_id": seller_id, "products": rows}
+
+
+@router.post("/stock/restock")
+async def restock_product(body: RestockRequest):
+    await bq.query(q.RESTOCK_SQL, {
+        "seller_id":  body.seller_id,
+        "product_id": body.product_id,
+        "quantity":   body.quantity,
+    })
+    # Return updated stock for this product
+    rows = await bq.query(q.PRODUCT_STOCK_SQL, {"seller_id": body.seller_id})
+    updated = next((r for r in rows if r["product_id"] == body.product_id), None)
+    return {"ok": True, "product_id": body.product_id, "quantity_added": body.quantity, "updated": updated}
 
 
 @router.get("/recommendations")

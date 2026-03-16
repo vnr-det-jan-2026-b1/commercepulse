@@ -315,6 +315,16 @@ ORDER BY current_stock ASC
 """
 
 
+# ── Restock: DML UPDATE on product_catalog ─────────────────────
+
+RESTOCK_SQL = f"""
+UPDATE `{R}.product_catalog`
+SET initial_stock = initial_stock + @quantity
+WHERE product_id = @product_id
+  AND seller_id  = @seller_id
+"""
+
+
 # ── Product Recommendations ────────────────────────────────────
 
 RECOMMENDATIONS_SQL = f"""
