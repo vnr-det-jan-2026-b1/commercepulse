@@ -29,9 +29,11 @@ export function ProductDetail({ onAddToCart, cartItems, stockMap }: Props) {
     );
   }
 
-  const stock = stockMap[product.id] ?? 10;
-  const soldOut = stock === 0;
-  const lowStock = !soldOut && stock <= 3;
+  const stockRaw = stockMap[product.id];
+  const stockLoaded = stockRaw !== undefined;
+  const stock = stockRaw ?? 0;
+  const soldOut = stockLoaded && stock === 0;
+  const lowStock = stockLoaded && !soldOut && stock <= 3;
   const inCart = cartItems.some((i) => i.product.id === product.id);
 
   function handleAdd() {
@@ -82,7 +84,7 @@ export function ProductDetail({ onAddToCart, cartItems, stockMap }: Props) {
 
           {/* Stock status */}
           <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", fontWeight: 600, color: soldOut ? "var(--danger)" : lowStock ? "#f59e0b" : "var(--accent)" }}>
-            ● {soldOut ? "Out of Stock" : lowStock ? `Only ${stock} units left` : `In Stock — ${stock} units`}
+            ● {soldOut ? "Out of Stock" : lowStock ? `Only ${stock} units left` : stockLoaded ? `In Stock — ${stock} units` : "In Stock"}
           </div>
 
           {!soldOut && (
@@ -93,7 +95,7 @@ export function ProductDetail({ onAddToCart, cartItems, stockMap }: Props) {
                 onChange={e => setQty(Number(e.target.value))}
                 style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px", padding: "8px 14px", fontSize: "14px", color: "var(--text-primary)", cursor: "pointer", fontFamily: "inherit" }}
               >
-                {Array.from({ length: Math.min(stock, 5) }, (_, i) => i + 1).map(n => (
+                {Array.from({ length: Math.min(stockLoaded ? stock : 5, 5) }, (_, i) => i + 1).map(n => (
                   <option key={n}>{n}</option>
                 ))}
               </select>

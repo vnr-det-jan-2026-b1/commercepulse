@@ -302,8 +302,8 @@ SELECT
   c.category,
   c.price,
   c.initial_stock,
-  COALESCE(SUM(e.quantity), 0)                         AS units_sold,
-  c.initial_stock - COALESCE(SUM(e.quantity), 0)       AS current_stock
+  COALESCE(SUM(e.quantity), 0)                                            AS units_sold,
+  GREATEST(c.initial_stock - COALESCE(SUM(e.quantity), 0), 0)            AS current_stock
 FROM `{R}.product_catalog` c
 LEFT JOIN `{R}.storefront_events` e
   ON  e.product_id  = c.product_id
@@ -343,11 +343,12 @@ WITH demand AS (
 stock AS (
   SELECT
     c.product_id, c.product_name, c.category, c.price, c.initial_stock,
-    c.initial_stock - COALESCE(SUM(e.quantity), 0)    AS current_stock
+    GREATEST(c.initial_stock - COALESCE(SUM(e.quantity), 0), 0) AS current_stock
   FROM `{R}.product_catalog` c
   LEFT JOIN `{R}.storefront_events` e
     ON  e.product_id = c.product_id
     AND e.event_type = 'purchase'
+    AND e.seller_id  = @seller_id
   WHERE c.seller_id = @seller_id
   GROUP BY c.product_id, c.product_name, c.category, c.price, c.initial_stock
 )

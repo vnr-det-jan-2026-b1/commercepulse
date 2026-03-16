@@ -58,8 +58,8 @@ function App() {
   }, []);
 
   function handleAddToCart(product: Product) {
-    const stock = stockMap[product.id] ?? 10;
-    if (stock <= 0) return;
+    const stockRaw = stockMap[product.id];
+    if (stockRaw !== undefined && stockRaw <= 0) return;
     add(product);
     tracker.addToCart(product, 1);
     setCartOpen(true);
