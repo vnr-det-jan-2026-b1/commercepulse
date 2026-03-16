@@ -97,8 +97,8 @@ export default function Dashboard() {
   const [mode, setMode] = useState<FilterMode>('7d');
   const [recDays, setRecDays] = useState(7);
   const [restockQty, setRestockQty] = useState<Record<string, number>>({});
-  const [restockDone, setRestockDone] = useState<Record<string, number>>({}); // productId → qty added
-  const [restockDismissed, setRestockDismissed] = useState<Set<string>>(new Set());
+  const [restockDone, setRestockDone] = useState<Record<string, number>>({});
+  const [restockError, setRestockError] = useState<string | null>(null);
   const restock = useRestock();
 
   const getQty = (productId: string, fallback = 10) =>
@@ -107,12 +107,14 @@ export default function Dashboard() {
   const handleRestock = (productId: string) => {
     const qty = getQty(productId);
     if (qty < 1) return;
+    setRestockError(null);
     restock.mutate({ productId, quantity: qty }, {
       onSuccess: () => setRestockDone(prev => ({ ...prev, [productId]: qty })),
+      onError: (err: unknown) => {
+        const msg = err instanceof Error ? err.message : 'Restock failed — check backend connection';
+        setRestockError(msg);
+      },
     });
-  };
-  const handleDismiss = (productId: string) => {
-    setRestockDismissed(prev => new Set([...prev, productId]));
   };
 
   useEffect(() => {
@@ -150,7 +152,6 @@ export default function Dashboard() {
   const urgentCount        = recs.filter(r => r.recommendation === 'RESTOCK_URGENT').length;
   const criticalStockItems = stock.filter(p => p.current_stock <= 3);
   const criticalStockCount = criticalStockItems.length;
-  const activeRestockAlerts = criticalStockItems.filter(p => !restockDismissed.has(p.product_id));
 
   const sortedRecs = [...recs].sort((a, b) =>
     REC_ORDER.indexOf(a.recommendation) - REC_ORDER.indexOf(b.recommendation)
@@ -410,53 +411,6 @@ export default function Dashboard() {
           {tab === 'recommendations' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-              {/* Low-stock restock alerts */}
-              {activeRestockAlerts.length > 0 && (
-                <div style={{ background: 'rgba(251,191,36,0.06)', border: '1px solid var(--amber)', borderRadius: '12px', padding: '16px 20px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                    <span style={{ color: 'var(--amber)', fontSize: '8px' }}>●</span>
-                    <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--amber)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Restock Alerts — {activeRestockAlerts.length} product{activeRestockAlerts.length > 1 ? 's' : ''} critically low</span>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {activeRestockAlerts.map(p => (
-                      <div key={p.product_id} style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', padding: '12px 16px' }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.product_name}</p>
-                          <p style={{ fontSize: '11px', color: p.current_stock === 0 ? 'var(--danger)' : 'var(--amber)', margin: 0, fontWeight: 600 }}>
-                            {p.current_stock === 0 ? '● Out of stock' : `● Only ${p.current_stock} unit${p.current_stock === 1 ? '' : 's'} remaining`}
-                          </p>
-                        </div>
-                        <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: 0, flexShrink: 0 }}>{p.category}</p>
-                        {restockDone[p.product_id] ? (
-                          <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--accent)', flexShrink: 0 }}>✓ +{restockDone[p.product_id]} units ordered</span>
-                        ) : (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-                            <input
-                              type="number" min={1} value={getQty(p.product_id)}
-                              onChange={e => setRestockQty(prev => ({ ...prev, [p.product_id]: Math.max(1, parseInt(e.target.value) || 1) }))}
-                              style={{ width: '56px', padding: '5px 8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--raised)', color: 'var(--text-primary)', fontSize: '12px', fontFamily: 'inherit', textAlign: 'center' }}
-                            />
-                            <button
-                              onClick={() => handleRestock(p.product_id)}
-                              disabled={restock.isPending}
-                              style={{ padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', background: 'var(--accent)', color: 'white', fontFamily: 'inherit', opacity: restock.isPending ? 0.6 : 1 }}
-                            >
-                              Restock
-                            </button>
-                            <button
-                              onClick={() => handleDismiss(p.product_id)}
-                              style={{ padding: '6px 10px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, border: '1px solid var(--border)', cursor: 'pointer', background: 'transparent', color: 'var(--text-secondary)', fontFamily: 'inherit' }}
-                            >
-                              Dismiss
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>Demand-based insights per product</p>
                 <div style={{ display: 'flex', gap: '6px' }}>
@@ -527,6 +481,14 @@ export default function Dashboard() {
           {/* ── INVENTORY / STOCK ROOM ── */}
           {tab === 'inventory' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+              {/* Restock error */}
+              {restockError && (
+                <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid var(--danger)', borderRadius: '10px', padding: '12px 16px', fontSize: '13px', color: 'var(--danger)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>⚠ {restockError}</span>
+                  <button onClick={() => setRestockError(null)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: '16px', lineHeight: 1 }}>×</button>
+                </div>
+              )}
 
               {/* Summary KPIs */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>

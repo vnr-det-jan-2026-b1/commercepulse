@@ -1,4 +1,5 @@
 """Analytics routes — GET /analytics/*"""
+from collections import defaultdict
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
@@ -7,6 +8,10 @@ from app.clients import bigquery_client as bq
 from app.services import analytics_queries as q
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
+
+# In-memory restock store: seller_id → { product_id: total_units_added }
+# Persists for the lifetime of the server process. Avoids BigQuery DML entirely.
+_restock_store: dict[str, dict[str, int]] = defaultdict(dict)
 
 
 class RestockRequest(BaseModel):
@@ -147,19 +152,28 @@ async def product_stock(
     _scope:    str = Depends(enforce_seller_scope),
 ):
     rows = await bq.query(q.PRODUCT_STOCK_SQL, {"seller_id": seller_id})
-    return {"seller_id": seller_id, "products": rows}
+    adjustments = _restock_store.get(seller_id, {})
+    products = []
+    for row in rows:
+        extra = adjustments.get(row["product_id"], 0)
+        products.append({
+            **row,
+            "initial_stock": row["initial_stock"] + extra,
+            "current_stock": row["current_stock"] + extra,
+        })
+    return {"seller_id": seller_id, "products": products}
 
 
 @router.post("/stock/restock")
 async def restock_product(body: RestockRequest):
-    await bq.query(q.RESTOCK_SQL, {
-        "seller_id":  body.seller_id,
-        "product_id": body.product_id,
-        "quantity":   body.quantity,
-    })
-    # Return updated stock for this product
+    store = _restock_store[body.seller_id]
+    store[body.product_id] = store.get(body.product_id, 0) + body.quantity
+    extra = store[body.product_id]
+    # Return updated stock using the same logic as GET /stock
     rows = await bq.query(q.PRODUCT_STOCK_SQL, {"seller_id": body.seller_id})
     updated = next((r for r in rows if r["product_id"] == body.product_id), None)
+    if updated:
+        updated = {**updated, "initial_stock": updated["initial_stock"] + extra, "current_stock": updated["current_stock"] + extra}
     return {"ok": True, "product_id": body.product_id, "quantity_added": body.quantity, "updated": updated}
 
 
