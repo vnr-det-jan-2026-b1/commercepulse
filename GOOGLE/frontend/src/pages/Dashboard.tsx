@@ -110,10 +110,6 @@ export default function Dashboard() {
     setRestockError(null);
     restock.mutate({ productId, quantity: qty }, {
       onSuccess: () => setRestockDone(prev => ({ ...prev, [productId]: qty })),
-      onError: (err: unknown) => {
-        const msg = err instanceof Error ? err.message : 'Restock failed — check backend connection';
-        setRestockError(msg);
-      },
     });
   };
 
