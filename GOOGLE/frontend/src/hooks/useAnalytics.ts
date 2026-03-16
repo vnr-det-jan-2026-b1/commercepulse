@@ -16,6 +16,21 @@ function saveAdjustment(productId: string, qty: number) {
   localStorage.setItem(RESTOCK_KEY, JSON.stringify(adj));
 }
 
+// Mirrors the server-side CASE logic in RECOMMENDATIONS_SQL
+function recomputeLabel(r: Recommendation): string {
+  const s  = r.current_stock;
+  const ds = r.demand_score ?? 0;
+  const views = r.views ?? 0;
+  const conv  = r.conversion_pct ?? 0;
+  const purchases = r.purchases ?? 0;
+  if (s <= 2 && ds >= 1)                      return 'RESTOCK_URGENT';
+  if (s <= 4 && ds >= 0.5)                    return 'RESTOCK_SOON';
+  if (views >= 5 && conv >= 20)               return 'INCREASE_PRICE';
+  if (views >= 4 && conv < 5)                 return 'DISCOUNT';
+  if (views < 2  && purchases === 0)          return 'DONT_RESTOCK';
+  return 'MAINTAIN';
+}
+
 function applyToStock(products: StockItem[]): StockItem[] {
   const adj = getAdjustments();
   return products.map(p => {
@@ -30,11 +45,12 @@ function applyToRecs(recs: Recommendation[]): Recommendation[] {
   return recs.map(r => {
     const extra = adj[r.product_id] || 0;
     if (!extra) return r;
-    return { ...r, current_stock: r.current_stock + extra };
+    const updated = { ...r, current_stock: r.current_stock + extra };
+    return { ...updated, recommendation: recomputeLabel(updated) };
   });
 }
 
-// ── Queries ─────────────────────────────────────────────────────────────────
+// ── Queries ──────────────────────────────────────────────────────────────────
 
 export const useStorefront = (days: number, granularity: 'day' | 'hour') =>
   useQuery<StorefrontData>({
@@ -60,13 +76,13 @@ export const useRecommendations = (days: number) =>
     refetchInterval: 60_000,
   });
 
-// ── Restock mutation ─────────────────────────────────────────────────────────
+// ── Restock mutation ──────────────────────────────────────────────────────────
 
 export const useRestock = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ productId, quantity }: { productId: string; quantity: number }) => {
-      // 1. Persist to localStorage so refreshes keep the adjustment
+      // 1. Persist to localStorage — survives page refresh
       saveAdjustment(productId, quantity);
 
       // 2. Update stock cache immediately
@@ -82,23 +98,23 @@ export const useRestock = () => {
         };
       });
 
-      // 3. Update all recommendations caches (covers 7d, 14d, 30d variants)
+      // 3. Update all recommendations caches — also recompute the URGENT/SOON label
       queryClient.setQueriesData(
         { queryKey: ['recommendations'] },
         (old: { recommendations: Recommendation[] } | undefined) => {
           if (!old) return old;
           return {
             ...old,
-            recommendations: old.recommendations.map((r: Recommendation) =>
-              r.product_id === productId
-                ? { ...r, current_stock: r.current_stock + quantity }
-                : r
-            ),
+            recommendations: old.recommendations.map((r: Recommendation) => {
+              if (r.product_id !== productId) return r;
+              const updated = { ...r, current_stock: r.current_stock + quantity };
+              return { ...updated, recommendation: recomputeLabel(updated) };
+            }),
           };
         }
       );
 
-      // 4. Backend call is best-effort — ignore 404 from undeployed endpoint
+      // 4. Backend call best-effort — works when local backend is running
       return restockProduct(productId, quantity).catch(() => ({ ok: true }));
     },
   });
