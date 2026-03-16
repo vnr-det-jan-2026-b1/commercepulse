@@ -1,4 +1,94 @@
 @import "tailwindcss";
 
-*, *::before, *::after { box-sizing: border-box; }
-body { font-family: system-ui, -apple-system, sans-serif; }
+/* ── Design tokens ── */
+:root {
+  --bg:             #fafafa;
+  --surface:        #ffffff;
+  --raised:         #f4f4f4;
+  --sidebar-bg:     #f0f0f0;
+  --border:         rgba(0, 0, 0, 0.07);
+  --text-primary:   #111111;
+  --text-secondary: #6b6b6b;
+  --accent:         #16a34a;
+  --accent-muted:   rgba(22, 163, 74, 0.10);
+  --danger:         #ef4444;
+  --danger-muted:   rgba(239, 68, 68, 0.10);
+  --amber:          #f59e0b;
+}
+
+:root[data-theme="dark"] {
+  --bg:             #111111;
+  --surface:        #1a1a1a;
+  --raised:         #222222;
+  --sidebar-bg:     #141414;
+  --border:         rgba(255, 255, 255, 0.07);
+  --text-primary:   #f0f0f0;
+  --text-secondary: #737373;
+  --accent:         #22c55e;
+  --accent-muted:   rgba(34, 197, 94, 0.10);
+  --danger:         #ef4444;
+  --danger-muted:   rgba(239, 68, 68, 0.10);
+  --amber:          #f59e0b;
+}
+
+@theme {
+  --color-bg:        var(--bg);
+  --color-surface:   var(--surface);
+  --color-raised:    var(--raised);
+  --color-sidebar:   var(--sidebar-bg);
+  --color-primary:   var(--text-primary);
+  --color-secondary: var(--text-secondary);
+  --color-accent:    var(--accent);
+  --color-danger:    var(--danger);
+  --font-sans:       'Inter', system-ui, sans-serif;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  transition: background-color 200ms ease, border-color 200ms ease, color 200ms ease;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+:root[data-theme="dark"] #root::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9998;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.stagger > * { animation: fadeUp 300ms ease both; }
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 50ms; }
+.stagger > *:nth-child(3) { animation-delay: 100ms; }
+.stagger > *:nth-child(4) { animation-delay: 150ms; }
+.stagger > *:nth-child(5) { animation-delay: 200ms; }
+.stagger > *:nth-child(6) { animation-delay: 250ms; }
+
+button {
+  transition: transform 150ms ease, background-color 200ms ease,
+              border-color 200ms ease, color 200ms ease;
+}
+button:active { transform: scale(0.97); }

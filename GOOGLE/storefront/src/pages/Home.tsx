@@ -11,14 +11,11 @@ interface Props {
   stockMap: StockMap;
 }
 
-function StockBadge({ stock }: { stock: number }) {
-  if (stock === 0) return <span className="text-xs font-semibold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">Sold Out</span>;
-  if (stock <= 3)  return <span className="text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">Only {stock} left!</span>;
-  return <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">In Stock</span>;
-}
+const HERO_ID = "P006"; // Headphones — dramatic on black
 
 export function Home({ onAddToCart, cartItems, stockMap }: Props) {
   const [activeCategory, setActiveCategory] = useState<string>("All");
+  const hero = products.find(p => p.id === HERO_ID)!;
 
   useEffect(() => { tracker.pageView(); }, []);
 
@@ -28,99 +25,164 @@ export function Home({ onAddToCart, cartItems, stockMap }: Props) {
 
   return (
     <div>
-      {/* Hero Banner */}
-      <div className="bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-700 text-white">
-        <div className="max-w-7xl mx-auto px-4 py-16 flex flex-col items-center text-center">
-          <span className="bg-white/20 text-white text-xs font-semibold px-3 py-1 rounded-full mb-4 tracking-widest uppercase">Free delivery on orders above Rs.999</span>
-          <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-4">
-            The Future of<br />Tech is Here
-          </h1>
-          <p className="text-indigo-200 text-lg mb-8 max-w-md">
-            Premium electronics, curated for you. From audio to wearables, shop the best at unbeatable prices.
-          </p>
-          <a href="#products" className="bg-white text-indigo-700 font-bold px-8 py-3 rounded-2xl hover:bg-indigo-50 transition-colors shadow-lg">
-            Shop Now
-          </a>
+      {/* ── HERO — always dark, Nike-style ── */}
+      <div style={{ background: "#0c0c0c", overflow: "hidden" }}>
+        <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "60px 32px 36px", display: "grid", gridTemplateColumns: "1fr 1.1fr 0.65fr", alignItems: "center", gap: "24px" }}>
+
+          {/* Left: huge italic headline */}
+          <div>
+            <p style={{ color: "rgba(255,255,255,0.3)", fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.14em", margin: "0 0 22px" }}>
+              ● Free delivery above Rs.999
+            </p>
+            <h1 style={{ color: "white", fontSize: "clamp(2.8rem, 5vw, 4.8rem)", fontWeight: 900, lineHeight: 0.95, letterSpacing: "-0.045em", margin: "0 0 32px", fontStyle: "italic" }}>
+              THE<br />FUTURE<br />OF TECH.
+            </h1>
+            <a
+              href="#products"
+              style={{ display: "inline-flex", alignItems: "center", gap: "8px", color: "white", fontSize: "13px", fontWeight: 600, textDecoration: "none", border: "1px solid rgba(255,255,255,0.18)", borderRadius: "6px", padding: "9px 18px", transition: "border-color 200ms ease, background 200ms ease" }}
+              onMouseEnter={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = "rgba(255,255,255,0.45)"; el.style.background = "rgba(255,255,255,0.06)"; }}
+              onMouseLeave={e => { const el = e.currentTarget as HTMLElement; el.style.borderColor = "rgba(255,255,255,0.18)"; el.style.background = "transparent"; }}
+            >
+              Shop Now <span>→</span>
+            </a>
+          </div>
+
+          {/* Center: floating hero product */}
+          <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+            <Link to={`/product/${hero.id}`} style={{ display: "block" }}>
+              <img
+                src={hero.image}
+                alt={hero.name}
+                style={{ width: "100%", maxWidth: "380px", objectFit: "contain", filter: "drop-shadow(0 40px 80px rgba(0,0,0,0.95))", transition: "transform 400ms ease" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLImageElement).style.transform = "scale(1.05) translateY(-8px)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLImageElement).style.transform = "scale(1) translateY(0)"; }}
+              />
+            </Link>
+          </div>
+
+          {/* Right: product info */}
+          <div style={{ textAlign: "right" }}>
+            <p style={{ color: "rgba(255,255,255,0.3)", fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", margin: "0 0 8px" }}>Featured</p>
+            <p style={{ color: "white", fontSize: "15px", fontWeight: 700, margin: "0 0 8px", lineHeight: 1.3 }}>{hero.name}</p>
+            <p style={{ color: "rgba(255,255,255,0.55)", fontSize: "22px", fontWeight: 800, margin: "0 0 16px", letterSpacing: "-0.025em" }}>
+              Rs.{hero.price.toLocaleString("en-IN")}
+            </p>
+            <Link to={`/product/${hero.id}`} style={{ color: "#22c55e", fontSize: "13px", fontWeight: 600, textDecoration: "none" }}>
+              View Details →
+            </Link>
+          </div>
+        </div>
+
+        {/* Bottom row: 3 mini product cards */}
+        <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "0 32px 32px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "10px" }}>
+            {products.slice(0, 3).map(p => {
+              const stock = stockMap[p.id] ?? 10;
+              const soldOut = stock === 0;
+              return (
+                <div
+                  key={p.id}
+                  style={{ display: "flex", alignItems: "center", gap: "12px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: "12px", padding: "12px 14px", transition: "background 200ms ease, border-color 200ms ease" }}
+                  onMouseEnter={e => { const el = e.currentTarget; el.style.background = "rgba(255,255,255,0.09)"; el.style.borderColor = "rgba(255,255,255,0.15)"; }}
+                  onMouseLeave={e => { const el = e.currentTarget; el.style.background = "rgba(255,255,255,0.05)"; el.style.borderColor = "rgba(255,255,255,0.07)"; }}
+                >
+                  <Link to={`/product/${p.id}`} style={{ flexShrink: 0 }}>
+                    <img src={p.image} alt={p.name} style={{ width: "50px", height: "50px", objectFit: "cover", borderRadius: "8px", opacity: soldOut ? 0.4 : 1, display: "block" }} />
+                  </Link>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <Link to={`/product/${p.id}`} style={{ textDecoration: "none" }}>
+                      <p style={{ color: "white", fontSize: "12px", fontWeight: 600, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</p>
+                    </Link>
+                    <p style={{ color: "rgba(255,255,255,0.3)", fontSize: "11px", margin: "3px 0 0" }}>{"★".repeat(Math.floor(p.rating))} {p.rating}</p>
+                  </div>
+                  <div style={{ textAlign: "right", flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "5px" }}>
+                    <p style={{ color: "white", fontSize: "13px", fontWeight: 700, margin: 0 }}>Rs.{p.price.toLocaleString("en-IN")}</p>
+                    <button
+                      onClick={() => !soldOut && onAddToCart(p)}
+                      disabled={soldOut}
+                      style={{ width: "26px", height: "26px", borderRadius: "50%", background: soldOut ? "rgba(255,255,255,0.1)" : "#22c55e", border: "none", color: "white", fontSize: "18px", cursor: soldOut ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 300, lineHeight: 1, padding: 0 }}
+                    >+</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-10" id="products">
-        {/* Category Filter */}
-        <div className="flex gap-2 overflow-x-auto pb-2 mb-8">
+      {/* ── PRODUCTS GRID ── */}
+      <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "48px 32px" }} id="products">
+
+        {/* Category filter */}
+        <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "4px", marginBottom: "28px" }}>
           {CATEGORIES.map(cat => (
             <button
               key={cat}
               onClick={() => setActiveCategory(cat)}
-              className={`whitespace-nowrap px-5 py-2 rounded-full text-sm font-semibold transition-all ${
-                activeCategory === cat
-                  ? "bg-indigo-600 text-white shadow-md"
-                  : "bg-white text-gray-600 border border-gray-200 hover:border-indigo-300 hover:text-indigo-600"
-              }`}
+              style={{ whiteSpace: "nowrap", padding: "7px 18px", borderRadius: "8px", fontSize: "13px", fontWeight: 600, border: "1px solid", cursor: "pointer", fontFamily: "inherit", background: activeCategory === cat ? "var(--accent)" : "var(--surface)", borderColor: activeCategory === cat ? "var(--accent)" : "var(--border)", color: activeCategory === cat ? "white" : "var(--text-secondary)" }}
             >
               {cat}
             </button>
           ))}
         </div>
 
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-gray-900">
+        <div style={{ display: "flex", alignItems: "baseline", gap: "10px", marginBottom: "20px" }}>
+          <h2 style={{ fontSize: "20px", fontWeight: 700, color: "var(--text-primary)", margin: 0, letterSpacing: "-0.02em" }}>
             {activeCategory === "All" ? "All Products" : activeCategory}
-            <span className="text-gray-400 font-normal text-sm ml-2">({filtered.length} items)</span>
           </h2>
+          <span style={{ fontSize: "13px", color: "var(--text-secondary)" }}>{filtered.length} items</span>
         </div>
 
-        {/* Product Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-          {filtered.map((p) => {
+        {/* Grid */}
+        <div className="stagger" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))", gap: "14px" }}>
+          {filtered.map(p => {
             const stock = stockMap[p.id] ?? 10;
-            const inCart = cartItems.some((i) => i.product.id === p.id);
+            const inCart = cartItems.some(i => i.product.id === p.id);
             const soldOut = stock === 0;
+            const lowStock = !soldOut && stock <= 3;
 
             return (
               <div
                 key={p.id}
-                className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 flex flex-col"
+                style={{ background: "var(--surface)", borderRadius: "12px", overflow: "hidden", display: "flex", flexDirection: "column", border: "1px solid transparent", transition: "border-color 200ms ease, transform 200ms ease" }}
+                onMouseEnter={e => { const el = e.currentTarget; el.style.borderColor = "var(--border)"; el.style.transform = "scale(1.02)"; }}
+                onMouseLeave={e => { const el = e.currentTarget; el.style.borderColor = "transparent"; el.style.transform = "scale(1)"; }}
               >
-                <Link to={`/product/${p.id}`} className="relative block">
+                <Link to={`/product/${p.id}`} style={{ position: "relative", display: "block", textDecoration: "none" }} onClick={() => tracker.productView(p)}>
                   <img
-                    src={p.image}
-                    alt={p.name}
-                    className={`w-full h-44 object-cover ${soldOut ? "opacity-40 grayscale" : ""}`}
+                    src={p.image} alt={p.name}
+                    style={{ width: "100%", height: "200px", objectFit: "cover", display: "block", opacity: soldOut ? 0.4 : 1, filter: soldOut ? "grayscale(1)" : "none" }}
                   />
                   {p.badge && (
-                    <span className="absolute top-2 left-2 bg-indigo-600 text-white text-xs font-bold px-2 py-0.5 rounded-full shadow">
-                      {p.badge}
+                    <span style={{ position: "absolute", top: "10px", left: "10px", fontSize: "10px", fontWeight: 700, color: "var(--text-secondary)", background: "var(--surface)", padding: "3px 8px", borderRadius: "4px", border: "1px solid var(--border)", display: "flex", alignItems: "center", gap: "4px" }}>
+                      <span style={{ color: "var(--accent)" }}>●</span> {p.badge}
                     </span>
                   )}
                 </Link>
-                <div className="p-4 flex flex-col flex-1">
-                  <span className="text-xs text-indigo-500 font-semibold uppercase tracking-wide">{p.category}</span>
-                  <Link to={`/product/${p.id}`}>
-                    <h3 className="mt-1 text-sm font-bold text-gray-900 hover:text-indigo-600 transition-colors leading-snug line-clamp-2">
-                      {p.name}
-                    </h3>
+                <div style={{ padding: "16px", display: "flex", flexDirection: "column", flex: 1 }}>
+                  <span style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--text-secondary)" }}>{p.category}</span>
+                  <Link to={`/product/${p.id}`} style={{ textDecoration: "none" }} onClick={() => tracker.productView(p)}>
+                    <h3 style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)", margin: "5px 0 6px", lineHeight: 1.35 }}>{p.name}</h3>
                   </Link>
-                  <div className="flex items-center gap-1 mt-1.5">
-                    <span className="text-yellow-400 text-xs">{"★".repeat(Math.floor(p.rating))}</span>
-                    <span className="text-xs text-gray-400">{p.rating} ({p.reviews.toLocaleString()})</span>
+                  <div style={{ fontSize: "11px", color: "var(--text-secondary)", marginBottom: "14px" }}>
+                    <span style={{ color: "#f59e0b" }}>{"★".repeat(Math.floor(p.rating))}</span> {p.rating} ({p.reviews.toLocaleString()})
                   </div>
-                  <div className="mt-auto pt-3 flex items-end justify-between gap-2">
+                  <div style={{ marginTop: "auto", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
                     <div>
-                      <p className="text-lg font-extrabold text-gray-900">Rs.{p.price.toLocaleString("en-IN")}</p>
-                      <div className="mt-1"><StockBadge stock={stock} /></div>
+                      <p style={{ fontSize: "17px", fontWeight: 800, color: "var(--text-primary)", margin: 0, letterSpacing: "-0.02em" }}>
+                        Rs.{p.price.toLocaleString("en-IN")}
+                      </p>
+                      <p style={{ fontSize: "11px", fontWeight: 600, margin: "4px 0 0", color: soldOut ? "var(--danger)" : lowStock ? "#f59e0b" : "var(--accent)", display: "flex", alignItems: "center", gap: "4px" }}>
+                        <span>●</span>
+                        {soldOut ? "Sold Out" : lowStock ? `Only ${stock} left` : "In Stock"}
+                      </p>
                     </div>
                     <button
                       onClick={() => !soldOut && onAddToCart(p)}
                       disabled={soldOut}
-                      className={`flex-shrink-0 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-                        soldOut
-                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                          : inCart
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm"
-                      }`}
+                      style={{ flexShrink: 0, padding: "8px 16px", borderRadius: "8px", fontSize: "12px", fontWeight: 700, border: "none", cursor: soldOut ? "not-allowed" : "pointer", fontFamily: "inherit", background: soldOut ? "var(--raised)" : inCart ? "var(--accent-muted)" : "var(--accent)", color: soldOut ? "var(--text-secondary)" : inCart ? "var(--accent)" : "white" }}
                     >
-                      {soldOut ? "Sold Out" : inCart ? "In Cart" : "Add"}
+                      {soldOut ? "Sold Out" : inCart ? "✓ In Cart" : "Add"}
                     </button>
                   </div>
                 </div>

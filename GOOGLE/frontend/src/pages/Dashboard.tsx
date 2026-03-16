@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell,
@@ -9,84 +9,96 @@ import type { Recommendation, StockItem } from '../types';
 type Tab = 'overview' | 'analytics' | 'recommendations' | 'products';
 type FilterMode = '1d-hourly' | '7d' | '30d';
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'overview',        label: 'Overview' },
-  { id: 'analytics',      label: 'Analytics' },
-  { id: 'recommendations', label: 'Recommendations' },
-  { id: 'products',       label: 'Products' },
-];
-
-const FILTERS: { label: string; mode: FilterMode }[] = [
-  { label: 'Today', mode: '1d-hourly' },
-  { label: '7 days', mode: '7d' },
-  { label: '30 days', mode: '30d' },
-];
-
 function modeToParams(mode: FilterMode): { days: number; granularity: 'day' | 'hour' } {
   if (mode === '1d-hourly') return { days: 1, granularity: 'hour' };
   if (mode === '7d')        return { days: 7, granularity: 'day' };
   return                           { days: 30, granularity: 'day' };
 }
 
-const FUNNEL_COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b'];
-
-function KpiCard({ label, value, sub, color, icon }: {
-  label: string; value: string | number; sub?: string; color: string; icon: string;
-}) {
-  return (
-    <div className={`bg-white rounded-2xl p-5 shadow-sm border-l-4 ${color}`}>
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{label}</p>
-          <p className="text-3xl font-bold text-gray-900 mt-1">{value}</p>
-          {sub && <p className="text-xs text-gray-500 mt-1">{sub}</p>}
-        </div>
-        <span className="text-2xl">{icon}</span>
-      </div>
-    </div>
-  );
-}
-
-const REC_CONFIG: Record<string, { emoji: string; border: string; badge: string; badgeText: string }> = {
-  RESTOCK_URGENT: { emoji: '🔴', border: 'border-red-400',    badge: 'bg-red-100 text-red-700',    badgeText: 'URGENT' },
-  RESTOCK_SOON:   { emoji: '🟠', border: 'border-orange-400', badge: 'bg-orange-100 text-orange-700', badgeText: 'RESTOCK SOON' },
-  INCREASE_PRICE: { emoji: '🟢', border: 'border-emerald-400', badge: 'bg-emerald-100 text-emerald-700', badgeText: 'RAISE PRICE' },
-  DISCOUNT:       { emoji: '🔵', border: 'border-blue-400',   badge: 'bg-blue-100 text-blue-700',   badgeText: 'DISCOUNT' },
-  DONT_RESTOCK:   { emoji: '⚪', border: 'border-gray-300',   badge: 'bg-gray-100 text-gray-500',   badgeText: 'SKIP' },
-  MAINTAIN:       { emoji: '✅', border: 'border-teal-400',   badge: 'bg-teal-100 text-teal-700',   badgeText: 'MAINTAIN' },
-};
-
 const REC_ORDER = ['RESTOCK_URGENT', 'RESTOCK_SOON', 'INCREASE_PRICE', 'DISCOUNT', 'DONT_RESTOCK', 'MAINTAIN'];
 
-const REC_MESSAGES: Record<string, string> = {
-  RESTOCK_URGENT: 'Restock immediately — selling fast',
-  RESTOCK_SOON:   'Restock within 3–5 days to avoid stockout',
-  INCREASE_PRICE: 'High demand — consider raising price 10–15%',
-  DISCOUNT:       'Low conversion — try a 10% discount to drive sales',
-  DONT_RESTOCK:   'Low interest — skip restocking this cycle',
-  MAINTAIN:       'Performing well — maintain current strategy',
+const REC_META: Record<string, { dot: string; label: string; msg: string }> = {
+  RESTOCK_URGENT: { dot: 'var(--danger)', label: 'URGENT',        msg: 'Restock immediately — selling fast' },
+  RESTOCK_SOON:   { dot: 'var(--amber)', label: 'RESTOCK SOON',  msg: 'Restock within 3–5 days to avoid stockout' },
+  INCREASE_PRICE: { dot: 'var(--accent)', label: 'RAISE PRICE',  msg: 'High demand — consider raising price 10–15%' },
+  DISCOUNT:       { dot: 'var(--text-secondary)', label: 'DISCOUNT', msg: 'Low conversion — try a 10% discount' },
+  DONT_RESTOCK:   { dot: 'var(--text-secondary)', label: 'SKIP',  msg: 'Low interest — skip restocking this cycle' },
+  MAINTAIN:       { dot: 'var(--accent)', label: 'OK',           msg: 'Performing well — maintain current strategy' },
 };
 
+// ── Icons ──────────────────────────────────────────────────────────────
+function IconOverview()  { return <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>; }
+function IconAnalytics() { return <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>; }
+function IconRecs()      { return <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>; }
+function IconProducts()  { return <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>; }
+
+const NAV_ITEMS: { id: Tab; label: string; Icon: () => JSX.Element }[] = [
+  { id: 'overview',        label: 'Overview',        Icon: IconOverview },
+  { id: 'analytics',       label: 'Analytics',       Icon: IconAnalytics },
+  { id: 'recommendations', label: 'Recommendations', Icon: IconRecs },
+  { id: 'products',        label: 'Products',        Icon: IconProducts },
+];
+
+// ── ThemeToggle ────────────────────────────────────────────────────────
+function ThemeToggle() {
+  const [theme, setTheme] = useState<string>(() => localStorage.getItem('nova-theme') ?? 'dark');
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('nova-theme', theme);
+  }, [theme]);
+  return (
+    <button
+      onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
+      style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '8px', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '15px', flexShrink: 0 }}
+      title="Toggle theme"
+    >
+      {theme === 'dark' ? '☀' : '☾'}
+    </button>
+  );
+}
+
+// ── StockBar ───────────────────────────────────────────────────────────
 function StockBar({ current, initial }: { current: number; initial: number }) {
   const pct = initial > 0 ? Math.max(0, Math.min(100, (current / initial) * 100)) : 0;
-  const color = current === 0 ? 'bg-red-400' : current <= 3 ? 'bg-amber-400' : 'bg-emerald-400';
+  const color = current === 0 ? 'var(--danger)' : current <= 3 ? 'var(--amber)' : 'var(--accent)';
   return (
-    <div className="w-20 bg-gray-100 rounded-full h-1.5">
-      <div className={`${color} h-1.5 rounded-full`} style={{ width: `${pct}%` }} />
+    <div style={{ width: '72px', background: 'var(--raised)', borderRadius: '4px', height: '4px' }}>
+      <div style={{ background: color, height: '4px', borderRadius: '4px', width: `${pct}%`, transition: 'width 400ms ease' }} />
     </div>
   );
 }
 
-function StockPill({ stock }: { stock: number }) {
-  if (stock === 0) return <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700">Out</span>;
-  if (stock <= 3)  return <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700">{stock} left</span>;
-  return <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700">{stock} in stock</span>;
+// ── KpiCard (Verbal-style) ─────────────────────────────────────────────
+function KpiCard({ label, value, sub, upward }: { label: string; value: string; sub?: string; upward?: boolean | null }) {
+  return (
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '20px 22px' }}>
+      <p style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)', margin: '0 0 10px' }}>{label}</p>
+      <p style={{ fontSize: '2.4rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0, lineHeight: 1, letterSpacing: '-0.04em' }}>{value}</p>
+      {sub && upward !== undefined && upward !== null && (
+        <p style={{ fontSize: '12px', fontWeight: 600, margin: '8px 0 0', color: upward ? 'var(--accent)' : 'var(--danger)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+          {upward ? '▲' : '▼'} {sub}
+        </p>
+      )}
+      {sub && upward === undefined && (
+        <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: '6px 0 0' }}>{sub}</p>
+      )}
+    </div>
+  );
 }
 
+// ── Tooltip theme ──────────────────────────────────────────────────────
+const tooltipStyle = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '12px', color: 'var(--text-primary)' };
+
+// ── Main Dashboard ─────────────────────────────────────────────────────
 export default function Dashboard() {
   const [tab, setTab]   = useState<Tab>('overview');
   const [mode, setMode] = useState<FilterMode>('7d');
   const [recDays, setRecDays] = useState(7);
+
+  useEffect(() => {
+    const t = localStorage.getItem('nova-theme') ?? 'dark';
+    document.documentElement.dataset.theme = t;
+  }, []);
 
   const { days, granularity } = modeToParams(mode);
   const { data, isLoading, error } = useStorefront(days, granularity);
@@ -100,8 +112,8 @@ export default function Dashboard() {
 
   const trafficData = (data?.traffic ?? []).map(p => ({
     label: p.hour_label ?? p.visit_date ?? '',
-    visits: p.visits,
-    unique: p.unique_sessions,
+    Visits: p.visits,
+    Sessions: p.unique_sessions,
   }));
 
   const funnelData = funnel
@@ -115,371 +127,410 @@ export default function Dashboard() {
 
   const lowStockCount   = stock.filter(p => p.current_stock > 0 && p.current_stock <= 3).length;
   const outOfStockCount = stock.filter(p => p.current_stock === 0).length;
+  const urgentCount     = recs.filter(r => r.recommendation === 'RESTOCK_URGENT').length;
 
   const sortedRecs = [...recs].sort((a, b) =>
     REC_ORDER.indexOf(a.recommendation) - REC_ORDER.indexOf(b.recommendation)
   );
 
+  // grid lines color adapts to theme
+  const gridColor = 'var(--border)';
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">N</div>
-            <span className="text-xl font-bold text-gray-900">Nova<span className="text-indigo-600">Admin</span></span>
-            <span className="bg-indigo-100 text-indigo-600 text-xs font-semibold px-2 py-1 rounded-full">SELLER_001</span>
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg)', fontFamily: 'inherit' }}>
+
+      {/* ── SIDEBAR ── */}
+      <aside style={{ width: '220px', flexShrink: 0, background: 'var(--sidebar-bg)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+        {/* Logo */}
+        <div style={{ padding: '22px 20px 20px', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+            <div style={{ width: '30px', height: '30px', background: 'var(--accent)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: '13px', flexShrink: 0 }}>N</div>
+            <span style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+              Nova<span style={{ color: 'var(--accent)' }}>Admin</span>
+            </span>
           </div>
-          <span className="text-xs text-gray-400">Auto-refreshes every 30s</span>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', background: 'var(--accent-muted)', borderRadius: '6px', padding: '3px 8px' }}>
+            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--accent)', display: 'inline-block' }} />
+            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--accent)' }}>SELLER_001</span>
+          </div>
         </div>
 
-        {/* Tab bar */}
-        <div className="max-w-7xl mx-auto px-6 flex gap-1 pb-0">
-          {TABS.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${
-                tab === t.id
-                  ? 'border-indigo-600 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              {t.label}
-              {t.id === 'recommendations' && recs.filter(r => r.recommendation === 'RESTOCK_URGENT').length > 0 && (
-                <span className="ml-1.5 bg-red-500 text-white text-xs rounded-full px-1.5 py-0.5">
-                  {recs.filter(r => r.recommendation === 'RESTOCK_URGENT').length}
-                </span>
-              )}
-            </button>
-          ))}
+        {/* Nav */}
+        <nav style={{ flex: 1, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: '2px', overflowY: 'auto' }}>
+          {NAV_ITEMS.map(({ id, label, Icon }) => {
+            const active = tab === id;
+            return (
+              <button
+                key={id}
+                onClick={() => setTab(id)}
+                style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 12px', borderRadius: '8px', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '13px', fontWeight: active ? 600 : 500, width: '100%', textAlign: 'left', background: active ? 'var(--accent-muted)' : 'transparent', color: active ? 'var(--accent)' : 'var(--text-secondary)', position: 'relative' }}
+                onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)'; }}
+                onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)'; }}
+              >
+                <Icon />
+                {label}
+                {id === 'recommendations' && urgentCount > 0 && (
+                  <span style={{ marginLeft: 'auto', background: 'var(--danger)', color: 'white', fontSize: '10px', fontWeight: 700, borderRadius: '10px', padding: '1px 6px' }}>{urgentCount}</span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Bottom */}
+        <div style={{ padding: '14px 16px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Auto-refresh 30s</span>
+          <ThemeToggle />
         </div>
-      </div>
+      </aside>
 
-      <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
-        {isLoading && tab !== 'recommendations' && tab !== 'products' && (
-          <div className="text-center py-20 text-gray-400">Loading analytics...</div>
-        )}
-        {error && (
-          <div className="bg-red-50 text-red-600 rounded-xl p-4 text-sm">
-            Failed to load data. Make sure the backend is running.
+      {/* ── MAIN ── */}
+      <main style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+
+        {/* Page header */}
+        <div style={{ padding: '28px 32px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.03em' }}>
+              {NAV_ITEMS.find(n => n.id === tab)?.label}
+            </h1>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '4px 0 0' }}>
+              {tab === 'overview'        && 'Store performance at a glance'}
+              {tab === 'analytics'       && 'Traffic and conversion funnel'}
+              {tab === 'recommendations' && 'Demand-based product insights'}
+              {tab === 'products'        && 'Inventory and performance metrics'}
+            </p>
           </div>
-        )}
+        </div>
 
-        {/* ── OVERVIEW TAB ── */}
-        {tab === 'overview' && data && (
-          <>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <KpiCard label="Total Visits"     value={(overview?.total_visits ?? 0).toLocaleString()}                      sub={`${overview?.unique_sessions ?? 0} unique sessions`} color="border-indigo-500" icon="👁️" />
-              <KpiCard label="Revenue"          value={`Rs.${(overview?.total_revenue ?? 0).toLocaleString('en-IN')}`}      sub={`${overview?.orders ?? 0} orders`}                   color="border-emerald-500" icon="💰" />
-              <KpiCard label="Cart Adds"        value={(overview?.cart_adds ?? 0).toLocaleString()}                         sub="items added to cart"                                  color="border-violet-500" icon="🛒" />
-              <KpiCard label="Conversion Rate"  value={`${(overview?.conversion_rate_pct ?? 0).toFixed(1)}%`}               sub="sessions → purchase"                                  color="border-amber-500" icon="📈" />
+        {/* Content */}
+        <div style={{ padding: '24px 32px 40px', flex: 1 }}>
+          {error && (
+            <div style={{ background: 'var(--danger-muted)', border: '1px solid var(--danger)', borderRadius: '10px', padding: '12px 16px', fontSize: '13px', color: 'var(--danger)', marginBottom: '20px' }}>
+              Failed to load data. Make sure the backend is running.
             </div>
+          )}
 
-            {/* Stock health */}
-            {stock.length > 0 && (
-              <div className="bg-white rounded-2xl p-6 shadow-sm">
-                <h2 className="text-base font-bold text-gray-800 mb-4">Inventory Health</h2>
-                <div className="flex flex-wrap gap-4">
-                  <div className="flex-1 min-w-40 bg-emerald-50 rounded-xl p-4 text-center">
-                    <p className="text-3xl font-bold text-emerald-600">{stock.filter(p => p.current_stock > 3).length}</p>
-                    <p className="text-xs text-emerald-700 font-semibold mt-1">Healthy Stock</p>
+          {/* ── OVERVIEW ── */}
+          {tab === 'overview' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {isLoading ? (
+                <div style={{ textAlign: 'center', paddingTop: '80px', color: 'var(--text-secondary)', fontSize: '14px' }}>Loading analytics…</div>
+              ) : data ? (
+                <>
+                  {/* KPI row */}
+                  <div className="stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+                    <KpiCard label="Total Visits"    value={(overview?.total_visits ?? 0).toLocaleString()}                     sub={`${overview?.unique_sessions ?? 0} unique sessions`} />
+                    <KpiCard label="Revenue"         value={`₹${((overview?.total_revenue ?? 0) / 1000).toFixed(1)}K`}          sub={`${overview?.orders ?? 0} orders`} />
+                    <KpiCard label="Cart Adds"       value={(overview?.cart_adds ?? 0).toLocaleString()}                        sub="items added to cart" />
+                    <KpiCard label="Conversion Rate" value={`${(overview?.conversion_rate_pct ?? 0).toFixed(1)}%`}               sub="sessions → purchase" upward={(overview?.conversion_rate_pct ?? 0) > 2} />
                   </div>
-                  <div className="flex-1 min-w-40 bg-amber-50 rounded-xl p-4 text-center">
-                    <p className="text-3xl font-bold text-amber-600">{lowStockCount}</p>
-                    <p className="text-xs text-amber-700 font-semibold mt-1">Low Stock (≤3 units)</p>
-                  </div>
-                  <div className="flex-1 min-w-40 bg-red-50 rounded-xl p-4 text-center">
-                    <p className="text-3xl font-bold text-red-600">{outOfStockCount}</p>
-                    <p className="text-xs text-red-700 font-semibold mt-1">Out of Stock</p>
-                  </div>
-                  <div className="flex-1 min-w-40 bg-indigo-50 rounded-xl p-4 text-center">
-                    <p className="text-3xl font-bold text-indigo-600">{stock.reduce((s, p) => s + p.units_sold, 0)}</p>
-                    <p className="text-xs text-indigo-700 font-semibold mt-1">Total Units Sold</p>
-                  </div>
-                </div>
-              </div>
-            )}
 
-            {/* Mini top products */}
-            <div className="bg-white rounded-2xl p-6 shadow-sm">
-              <h2 className="text-base font-bold text-gray-800 mb-4">Top Products by Revenue</h2>
-              {data.products.length === 0 ? (
-                <p className="text-gray-400 text-sm text-center py-8">No product data yet.</p>
-              ) : (
-                <div className="space-y-3">
-                  {data.products.slice(0, 5).map((p) => (
-                    <div key={p.product_id} className="flex items-center gap-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-900 truncate">{p.product_name}</p>
-                        <p className="text-xs text-gray-400">{p.views} views · {p.purchases} purchases</p>
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        <p className="text-sm font-bold text-gray-900">Rs.{p.revenue.toLocaleString('en-IN')}</p>
-                        <p className="text-xs text-emerald-600">{p.conversion_pct ?? 0}% conv.</p>
-                      </div>
+                  {/* Chart + Inventory Health row */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    {/* Traffic mini chart */}
+                    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '20px 20px 14px' }}>
+                      <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 16px' }}>Traffic Overview</p>
+                      {trafficData.length === 0 ? (
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '13px', textAlign: 'center', padding: '32px 0' }}>No traffic data yet</p>
+                      ) : (
+                        <ResponsiveContainer width="100%" height={180}>
+                          <LineChart data={trafficData}>
+                            <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                            <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} />
+                            <YAxis tick={{ fontSize: 10, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                            <Tooltip contentStyle={tooltipStyle} />
+                            <Line type="monotone" dataKey="Visits" stroke="var(--accent)" strokeWidth={2} dot={false} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      )}
                     </div>
+
+                    {/* Inventory health */}
+                    {stock.length > 0 && (
+                      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '20px' }}>
+                        <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 16px' }}>Inventory Health</p>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                          {[
+                            { n: stock.filter(p => p.current_stock > 3).length, label: 'Healthy Stock', color: 'var(--accent)' },
+                            { n: lowStockCount,   label: 'Low Stock',    color: 'var(--amber)' },
+                            { n: outOfStockCount, label: 'Out of Stock', color: 'var(--danger)' },
+                            { n: stock.reduce((s, p) => s + p.units_sold, 0), label: 'Units Sold', color: 'var(--text-primary)' },
+                          ].map(({ n, label, color }) => (
+                            <div key={label} style={{ background: 'var(--raised)', border: '1px solid var(--border)', borderRadius: '10px', padding: '14px 16px' }}>
+                              <p style={{ fontSize: '1.8rem', fontWeight: 800, color, margin: 0, lineHeight: 1, letterSpacing: '-0.03em' }}>{n}</p>
+                              <p style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', margin: '6px 0 0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Top products */}
+                  <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '20px' }}>
+                    <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 16px' }}>Top Products by Revenue</p>
+                    {data.products.length === 0 ? (
+                      <p style={{ color: 'var(--text-secondary)', fontSize: '13px', textAlign: 'center', padding: '24px 0' }}>No product data yet</p>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+                        {data.products.slice(0, 5).map((p, i) => (
+                          <div key={p.product_id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 0', borderBottom: i < 4 ? '1px solid var(--border)' : 'none' }}>
+                            <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', width: '18px', textAlign: 'center', flexShrink: 0 }}>{i + 1}</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.product_name}</p>
+                              <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '2px 0 0' }}>{p.views} views · {p.purchases} purchases</p>
+                            </div>
+                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                              <p style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>₹{p.revenue.toLocaleString('en-IN')}</p>
+                              <p style={{ fontSize: '11px', fontWeight: 600, color: 'var(--accent)', margin: '2px 0 0' }}>{p.conversion_pct ?? 0}% conv.</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : null}
+            </div>
+          )}
+
+          {/* ── ANALYTICS ── */}
+          {tab === 'analytics' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>
+                  {granularity === 'hour' ? 'Hourly traffic today' : `Daily traffic — last ${days} days`}
+                </p>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  {([{ label: 'Today', mode: '1d-hourly' as FilterMode }, { label: '7 days', mode: '7d' as FilterMode }, { label: '30 days', mode: '30d' as FilterMode }]).map(f => (
+                    <button
+                      key={f.mode}
+                      onClick={() => setMode(f.mode)}
+                      style={{ padding: '6px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, border: '1px solid', cursor: 'pointer', fontFamily: 'inherit', background: mode === f.mode ? 'var(--accent)' : 'transparent', borderColor: mode === f.mode ? 'var(--accent)' : 'var(--border)', color: mode === f.mode ? 'white' : 'var(--text-secondary)' }}
+                    >
+                      {f.label}
+                    </button>
                   ))}
                 </div>
-              )}
-            </div>
-          </>
-        )}
-
-        {/* ── ANALYTICS TAB ── */}
-        {tab === 'analytics' && (
-          <>
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-gray-900">Traffic & Funnel</h2>
-              <div className="flex gap-2">
-                {FILTERS.map(f => (
-                  <button
-                    key={f.mode}
-                    onClick={() => setMode(f.mode)}
-                    className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${
-                      mode === f.mode ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
               </div>
-            </div>
 
-            {data && (
-              <>
-                <div className="bg-white rounded-2xl p-6 shadow-sm">
-                  <h3 className="text-sm font-bold text-gray-700 mb-4">
-                    {granularity === 'hour' ? 'Hourly Traffic (Today)' : `Daily Traffic (${days} days)`}
-                  </h3>
-                  {trafficData.length === 0 ? (
-                    <p className="text-gray-400 text-sm text-center py-8">No traffic data yet.</p>
+              {/* Traffic chart */}
+              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '22px 22px 14px' }}>
+                <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 18px' }}>Visits & Sessions</p>
+                {trafficData.length === 0 ? (
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '13px', textAlign: 'center', padding: '48px 0' }}>No traffic data yet.</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={260}>
+                    <LineChart data={trafficData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                      <Tooltip contentStyle={tooltipStyle} />
+                      <Line type="monotone" dataKey="Visits"   stroke="var(--accent)" strokeWidth={2.5} dot={granularity === 'hour'} name="Visits" />
+                      <Line type="monotone" dataKey="Sessions" stroke="var(--text-secondary)" strokeWidth={1.5} dot={false} name="Sessions" strokeDasharray="4 2" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+
+              {/* Funnel + Key Metrics */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '22px' }}>
+                  <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 18px' }}>Conversion Funnel</p>
+                  {funnelData.every(f => f.value === 0) ? (
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '13px', textAlign: 'center', padding: '40px 0' }}>No funnel data yet.</p>
                   ) : (
-                    <ResponsiveContainer width="100%" height={240}>
-                      <LineChart data={trafficData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                        <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                        <Tooltip />
-                        <Line type="monotone" dataKey="visits" stroke="#6366f1" strokeWidth={2} dot={granularity === 'hour'} name="Visits" />
-                        <Line type="monotone" dataKey="unique" stroke="#8b5cf6" strokeWidth={2} dot={granularity === 'hour'} name="Sessions" />
-                      </LineChart>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <BarChart data={funnelData} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                        <XAxis type="number" tick={{ fontSize: 10, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                        <YAxis dataKey="name" type="category" width={90} tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} />
+                        <Tooltip contentStyle={tooltipStyle} />
+                        <Bar dataKey="value" radius={[0, 6, 6, 0]}>
+                          {funnelData.map((_, i) => (
+                            <Cell key={i} fill={i === 0 ? 'var(--accent)' : i === 1 ? '#4ade80' : i === 2 ? '#86efac' : '#bbf7d0'} />
+                          ))}
+                        </Bar>
+                      </BarChart>
                     </ResponsiveContainer>
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="bg-white rounded-2xl p-6 shadow-sm">
-                    <h3 className="text-sm font-bold text-gray-700 mb-4">Conversion Funnel</h3>
-                    {funnelData.every(f => f.value === 0) ? (
-                      <p className="text-gray-400 text-sm text-center py-8">No funnel data yet.</p>
-                    ) : (
-                      <ResponsiveContainer width="100%" height={220}>
-                        <BarChart data={funnelData} layout="vertical">
-                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                          <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
-                          <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 11 }} />
-                          <Tooltip />
-                          <Bar dataKey="value" radius={[0, 6, 6, 0]}>
-                            {funnelData.map((_, i) => <Cell key={i} fill={FUNNEL_COLORS[i]} />)}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                    )}
-                  </div>
-
-                  <div className="bg-white rounded-2xl p-6 shadow-sm">
-                    <h3 className="text-sm font-bold text-gray-700 mb-4">Key Metrics</h3>
-                    <div className="space-y-4">
-                      {[
-                        { label: 'Total Visits',    value: (overview?.total_visits ?? 0).toLocaleString(),                     bar: null },
-                        { label: 'Unique Sessions', value: (overview?.unique_sessions ?? 0).toLocaleString(),                   bar: null },
-                        { label: 'Product Views',   value: (overview?.product_views ?? 0).toLocaleString(),                    bar: null },
-                        { label: 'Cart Adds',       value: (overview?.cart_adds ?? 0).toLocaleString(),                        bar: null },
-                        { label: 'Orders',          value: (overview?.orders ?? 0).toLocaleString(),                           bar: null },
-                        { label: 'Revenue',         value: `Rs.${(overview?.total_revenue ?? 0).toLocaleString('en-IN')}`,     bar: null },
-                      ].map(m => (
-                        <div key={m.label} className="flex items-center justify-between text-sm">
-                          <span className="text-gray-500">{m.label}</span>
-                          <span className="font-semibold text-gray-900">{m.value}</span>
-                        </div>
-                      ))}
-                    </div>
+                <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '22px' }}>
+                  <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 18px' }}>Key Metrics</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+                    {[
+                      { label: 'Total Visits',    value: (overview?.total_visits ?? 0).toLocaleString() },
+                      { label: 'Unique Sessions', value: (overview?.unique_sessions ?? 0).toLocaleString() },
+                      { label: 'Product Views',   value: (overview?.product_views ?? 0).toLocaleString() },
+                      { label: 'Cart Adds',       value: (overview?.cart_adds ?? 0).toLocaleString() },
+                      { label: 'Orders',          value: (overview?.orders ?? 0).toLocaleString() },
+                      { label: 'Revenue',         value: `₹${(overview?.total_revenue ?? 0).toLocaleString('en-IN')}` },
+                    ].map((m, i, arr) => (
+                      <div key={m.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 0', borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                        <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{m.label}</span>
+                        <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>{m.value}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              </>
-            )}
-          </>
-        )}
-
-        {/* ── RECOMMENDATIONS TAB ── */}
-        {tab === 'recommendations' && (
-          <>
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-gray-900">AI Recommendations</h2>
-                <p className="text-sm text-gray-500 mt-0.5">Demand-based insights for each product</p>
-              </div>
-              <div className="flex gap-2">
-                {[7, 14, 30].map(d => (
-                  <button
-                    key={d}
-                    onClick={() => setRecDays(d)}
-                    className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${
-                      recDays === d ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    {d}d
-                  </button>
-                ))}
               </div>
             </div>
+          )}
 
-            {sortedRecs.length === 0 ? (
-              <div className="text-center py-20 text-gray-400">No recommendation data yet. Drive some traffic to the storefront first.</div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {sortedRecs.map((rec: Recommendation) => {
-                  const cfg = REC_CONFIG[rec.recommendation] ?? REC_CONFIG['MAINTAIN'];
-                  return (
-                    <div key={rec.product_id} className={`bg-white rounded-2xl p-5 shadow-sm border-l-4 ${cfg.border}`}>
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${cfg.badge}`}>
-                              {cfg.emoji} {cfg.badgeText}
-                            </span>
-                          </div>
-                          <p className="text-sm font-bold text-gray-900 truncate">{rec.product_name}</p>
-                          <p className="text-xs text-gray-500 mt-1">{REC_MESSAGES[rec.recommendation]}</p>
-                        </div>
-                        <div className="text-right flex-shrink-0">
-                          <p className="text-lg font-extrabold text-gray-900">{(rec.demand_score ?? 0).toFixed(1)}</p>
-                          <p className="text-xs text-gray-400">demand</p>
-                        </div>
-                      </div>
-
-                      <div className="mt-4 grid grid-cols-4 gap-2 text-center">
-                        <div className="bg-gray-50 rounded-xl p-2">
-                          <p className="text-sm font-bold text-gray-800">{rec.views}</p>
-                          <p className="text-xs text-gray-400">views</p>
-                        </div>
-                        <div className="bg-gray-50 rounded-xl p-2">
-                          <p className="text-sm font-bold text-gray-800">{rec.cart_adds}</p>
-                          <p className="text-xs text-gray-400">cart</p>
-                        </div>
-                        <div className="bg-gray-50 rounded-xl p-2">
-                          <p className="text-sm font-bold text-gray-800">{rec.purchases}</p>
-                          <p className="text-xs text-gray-400">sold</p>
-                        </div>
-                        <div className="bg-gray-50 rounded-xl p-2">
-                          <p className="text-sm font-bold text-gray-800">{rec.current_stock}</p>
-                          <p className="text-xs text-gray-400">stock</p>
-                        </div>
-                      </div>
-
-                      <div className="mt-3 flex items-center gap-2">
-                        <StockBar current={rec.current_stock} initial={10} />
-                        <span className="text-xs text-gray-400">{rec.current_stock}/10 units</span>
-                        <span className="ml-auto text-xs text-gray-400">{(rec.conversion_pct ?? 0).toFixed(1)}% conv.</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </>
-        )}
-
-        {/* ── PRODUCTS TAB ── */}
-        {tab === 'products' && (
-          <>
-            <h2 className="text-lg font-bold text-gray-900">Product Inventory</h2>
-
-            {stock.length === 0 ? (
-              <div className="text-center py-20 text-gray-400">No stock data yet.</div>
-            ) : (
-              <div className="bg-white rounded-2xl shadow-sm overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-gray-400 text-xs uppercase tracking-wider border-b">
-                      <th className="px-6 py-4 font-semibold">Product</th>
-                      <th className="px-6 py-4 font-semibold">Category</th>
-                      <th className="px-6 py-4 font-semibold text-right">Price</th>
-                      <th className="px-6 py-4 font-semibold text-right">Sold</th>
-                      <th className="px-6 py-4 font-semibold text-center">Stock Level</th>
-                      <th className="px-6 py-4 font-semibold text-center">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {stock
-                      .slice()
-                      .sort((a: StockItem, b: StockItem) => a.current_stock - b.current_stock)
-                      .map((p: StockItem) => (
-                        <tr key={p.product_id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 font-semibold text-gray-900">{p.product_name}</td>
-                          <td className="px-6 py-4 text-gray-500 text-xs">{p.category}</td>
-                          <td className="px-6 py-4 text-right text-gray-700">Rs.{p.price.toLocaleString('en-IN')}</td>
-                          <td className="px-6 py-4 text-right text-gray-700">{p.units_sold}</td>
-                          <td className="px-6 py-4">
-                            <div className="flex flex-col items-center gap-1">
-                              <StockBar current={p.current_stock} initial={p.initial_stock} />
-                              <span className="text-xs text-gray-400">{p.current_stock}/{p.initial_stock}</span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <StockPill stock={p.current_stock} />
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {/* Also show product performance table if storefront data available */}
-            {data && data.products.length > 0 && (
-              <>
-                <h2 className="text-lg font-bold text-gray-900 pt-4">Performance Metrics</h2>
-                <div className="bg-white rounded-2xl shadow-sm overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-left text-gray-400 text-xs uppercase tracking-wider border-b">
-                        <th className="px-6 py-4 font-semibold">Product</th>
-                        <th className="px-6 py-4 font-semibold text-right">Views</th>
-                        <th className="px-6 py-4 font-semibold text-right">Cart Adds</th>
-                        <th className="px-6 py-4 font-semibold text-right">Purchases</th>
-                        <th className="px-6 py-4 font-semibold text-right">Revenue</th>
-                        <th className="px-6 py-4 font-semibold text-right">Conv. %</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {data.products.map((p) => (
-                        <tr key={p.product_id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 font-medium text-gray-900">{p.product_name}</td>
-                          <td className="px-6 py-4 text-right text-gray-600">{p.views}</td>
-                          <td className="px-6 py-4 text-right text-gray-600">{p.cart_adds}</td>
-                          <td className="px-6 py-4 text-right text-gray-600">{p.purchases}</td>
-                          <td className="px-6 py-4 text-right font-semibold text-gray-900">Rs.{p.revenue.toLocaleString('en-IN')}</td>
-                          <td className="px-6 py-4 text-right">
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                              (p.conversion_pct ?? 0) >= 5  ? 'bg-emerald-100 text-emerald-700' :
-                              (p.conversion_pct ?? 0) >= 1  ? 'bg-amber-100 text-amber-700' :
-                                                              'bg-gray-100 text-gray-500'
-                            }`}>
-                              {p.conversion_pct ?? 0}%
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+          {/* ── RECOMMENDATIONS ── */}
+          {tab === 'recommendations' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>Demand-based insights per product</p>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  {[7, 14, 30].map(d => (
+                    <button
+                      key={d}
+                      onClick={() => setRecDays(d)}
+                      style={{ padding: '6px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, border: '1px solid', cursor: 'pointer', fontFamily: 'inherit', background: recDays === d ? 'var(--accent)' : 'transparent', borderColor: recDays === d ? 'var(--accent)' : 'var(--border)', color: recDays === d ? 'white' : 'var(--text-secondary)' }}
+                    >
+                      {d}d
+                    </button>
+                  ))}
                 </div>
-              </>
-            )}
-          </>
-        )}
-      </div>
+              </div>
+
+              {sortedRecs.length === 0 ? (
+                <div style={{ textAlign: 'center', paddingTop: '80px', color: 'var(--text-secondary)', fontSize: '14px' }}>
+                  No recommendation data yet. Drive some traffic to NovaCart first.
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
+                  {sortedRecs.map((rec: Recommendation) => {
+                    const meta = REC_META[rec.recommendation] ?? REC_META['MAINTAIN'];
+                    return (
+                      <div key={rec.product_id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '18px 20px' }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', marginBottom: '12px' }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                              <span style={{ color: meta.dot, fontSize: '8px' }}>●</span>
+                              <span style={{ fontSize: '10px', fontWeight: 700, color: meta.dot, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{meta.label}</span>
+                            </div>
+                            <p style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rec.product_name}</p>
+                            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>{meta.msg}</p>
+                          </div>
+                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                            <p style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0, lineHeight: 1, letterSpacing: '-0.03em' }}>{(rec.demand_score ?? 0).toFixed(1)}</p>
+                            <p style={{ fontSize: '10px', color: 'var(--text-secondary)', margin: '3px 0 0', textTransform: 'uppercase', letterSpacing: '0.05em' }}>demand</p>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginBottom: '12px' }}>
+                          {[
+                            { v: rec.views,     l: 'views' },
+                            { v: rec.cart_adds, l: 'cart' },
+                            { v: rec.purchases, l: 'sold' },
+                            { v: rec.current_stock, l: 'stock' },
+                          ].map(({ v, l }) => (
+                            <div key={l} style={{ background: 'var(--raised)', borderRadius: '8px', padding: '8px', textAlign: 'center' }}>
+                              <p style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{v}</p>
+                              <p style={{ fontSize: '10px', color: 'var(--text-secondary)', margin: '2px 0 0', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{l}</p>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <StockBar current={rec.current_stock} initial={10} />
+                          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{rec.current_stock}/10 units</span>
+                          <span style={{ marginLeft: 'auto', fontSize: '11px', color: 'var(--text-secondary)' }}>{(rec.conversion_pct ?? 0).toFixed(1)}% conv.</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── PRODUCTS ── */}
+          {tab === 'products' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              {/* Inventory table */}
+              <div>
+                <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 12px' }}>Inventory Levels</p>
+                {stock.length === 0 ? (
+                  <div style={{ textAlign: 'center', paddingTop: '60px', color: 'var(--text-secondary)', fontSize: '14px' }}>No stock data yet.</div>
+                ) : (
+                  <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                          {['Product', 'Category', 'Price', 'Sold', 'Stock Level', 'Status'].map(h => (
+                            <th key={h} style={{ padding: '12px 16px', textAlign: h === 'Product' ? 'left' : 'right', fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>
+                              {h === 'Stock Level' || h === 'Status' ? <span style={{ display: 'block', textAlign: 'center' }}>{h}</span> : h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {stock.slice().sort((a: StockItem, b: StockItem) => a.current_stock - b.current_stock).map((p: StockItem, i: number) => (
+                          <tr key={p.product_id} style={{ borderBottom: '1px solid var(--border)', background: i % 2 === 1 ? 'var(--raised)' : 'transparent' }}>
+                            <td style={{ padding: '12px 16px', fontWeight: 600, color: 'var(--text-primary)' }}>{p.product_name}</td>
+                            <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--text-secondary)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{p.category}</td>
+                            <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--text-primary)', fontWeight: 500 }}>₹{p.price.toLocaleString('en-IN')}</td>
+                            <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--text-secondary)' }}>{p.units_sold}</td>
+                            <td style={{ padding: '12px 16px' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                                <StockBar current={p.current_stock} initial={p.initial_stock} />
+                                <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>{p.current_stock}/{p.initial_stock}</span>
+                              </div>
+                            </td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                              <span style={{ fontSize: '12px', fontWeight: 600, color: p.current_stock === 0 ? 'var(--danger)' : p.current_stock <= 3 ? 'var(--amber)' : 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                                <span style={{ fontSize: '7px' }}>●</span>
+                                {p.current_stock === 0 ? 'Out' : p.current_stock <= 3 ? 'Low' : 'OK'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Performance table */}
+              {data && data.products.length > 0 && (
+                <div>
+                  <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 12px' }}>Performance Metrics</p>
+                  <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                          {['Product', 'Views', 'Cart Adds', 'Purchases', 'Revenue', 'Conv. %'].map(h => (
+                            <th key={h} style={{ padding: '12px 16px', textAlign: h === 'Product' ? 'left' : 'right', fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.products.map((p, i) => (
+                          <tr key={p.product_id} style={{ borderBottom: '1px solid var(--border)', background: i % 2 === 1 ? 'var(--raised)' : 'transparent' }}>
+                            <td style={{ padding: '12px 16px', fontWeight: 500, color: 'var(--text-primary)' }}>{p.product_name}</td>
+                            <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--text-secondary)' }}>{p.views}</td>
+                            <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--text-secondary)' }}>{p.cart_adds}</td>
+                            <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--text-secondary)' }}>{p.purchases}</td>
+                            <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, color: 'var(--text-primary)' }}>₹{p.revenue.toLocaleString('en-IN')}</td>
+                            <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600, color: (p.conversion_pct ?? 0) >= 5 ? 'var(--accent)' : (p.conversion_pct ?? 0) >= 1 ? 'var(--amber)' : 'var(--text-secondary)' }}>
+                              {p.conversion_pct ?? 0}%
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </main>
     </div>
   );
 }

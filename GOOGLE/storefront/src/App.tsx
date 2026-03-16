@@ -14,10 +14,31 @@ const SELLER_ID = (import.meta.env.VITE_SELLER_ID as string) || "SELLER_001";
 
 export type StockMap = Record<string, number>;
 
+function ThemeToggle() {
+  const [theme, setTheme] = useState<string>(() => localStorage.getItem("nova-theme") ?? "dark");
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("nova-theme", theme);
+  }, [theme]);
+  return (
+    <button
+      onClick={() => setTheme(t => t === "dark" ? "light" : "dark")}
+      style={{ background: "none", border: "1px solid var(--border)", borderRadius: "8px", width: "34px", height: "34px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--text-secondary)", fontSize: "15px", flexShrink: 0 }}
+    >
+      {theme === "dark" ? "☀" : "☾"}
+    </button>
+  );
+}
+
 function App() {
   const { items, add, remove, clear, total, count } = useCart();
   const [cartOpen, setCartOpen] = useState(false);
   const [stockMap, setStockMap] = useState<StockMap>({});
+
+  useEffect(() => {
+    const t = localStorage.getItem("nova-theme") ?? "dark";
+    document.documentElement.dataset.theme = t;
+  }, []);
 
   function refreshStock() {
     fetch(`${API_URL}/v1/analytics/stock?seller_id=${SELLER_ID}`)
@@ -42,27 +63,33 @@ function App() {
 
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-gray-50">
-        <nav className="bg-white border-b border-gray-100 sticky top-0 z-30 shadow-sm">
-          <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-            <Link to="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">N</div>
-              <span className="text-xl font-bold text-gray-900">Nova<span className="text-indigo-600">Cart</span></span>
+      <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
+        {/* ── Nav ── */}
+        <nav style={{ position: "sticky", top: 0, zIndex: 30, background: "var(--nav-bg)", borderBottom: "1px solid var(--border)" }}>
+          <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "0 24px", height: "60px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <Link to="/" style={{ display: "flex", alignItems: "center", gap: "10px", textDecoration: "none" }}>
+              <div style={{ width: "32px", height: "32px", background: "var(--accent)", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 800, fontSize: "14px" }}>N</div>
+              <span style={{ fontSize: "18px", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.02em" }}>
+                Nova<span style={{ color: "var(--accent)" }}>Cart</span>
+              </span>
             </Link>
-            <button
-              onClick={() => setCartOpen(true)}
-              className="relative flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13l-1.5 7h10.8" />
-              </svg>
-              Cart
-              {count > 0 && (
-                <span className="bg-white text-indigo-600 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                  {count}
-                </span>
-              )}
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <ThemeToggle />
+              <button
+                onClick={() => setCartOpen(true)}
+                style={{ display: "flex", alignItems: "center", gap: "8px", background: "var(--accent)", color: "white", border: "none", borderRadius: "8px", padding: "8px 16px", fontSize: "13px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+              >
+                <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13l-1.5 7h10.8" />
+                </svg>
+                Cart
+                {count > 0 && (
+                  <span style={{ background: "white", color: "var(--accent)", fontSize: "10px", fontWeight: 800, borderRadius: "50%", width: "18px", height: "18px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
         </nav>
 

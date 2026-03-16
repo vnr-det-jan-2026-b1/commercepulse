@@ -11,12 +11,6 @@ interface Props {
   stockMap: StockMap;
 }
 
-function StockPill({ stock }: { stock: number }) {
-  if (stock === 0) return <span className="inline-flex items-center gap-1 text-sm font-semibold text-red-600 bg-red-50 px-3 py-1 rounded-full">Sold Out</span>;
-  if (stock <= 3)  return <span className="inline-flex items-center gap-1 text-sm font-semibold text-amber-600 bg-amber-50 px-3 py-1 rounded-full">Only {stock} units left</span>;
-  return <span className="inline-flex items-center gap-1 text-sm font-semibold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">In Stock ({stock} units)</span>;
-}
-
 export function ProductDetail({ onAddToCart, cartItems, stockMap }: Props) {
   const { id } = useParams<{ id: string }>();
   const product = products.find((p) => p.id === id);
@@ -28,15 +22,16 @@ export function ProductDetail({ onAddToCart, cartItems, stockMap }: Props) {
 
   if (!product) {
     return (
-      <div className="max-w-7xl mx-auto px-4 py-16 text-center">
-        <p className="text-gray-500">Product not found.</p>
-        <Link to="/" className="mt-4 inline-block text-indigo-600 font-medium">Back to store</Link>
+      <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "80px 32px", textAlign: "center" }}>
+        <p style={{ color: "var(--text-secondary)" }}>Product not found.</p>
+        <Link to="/" style={{ color: "var(--accent)", fontWeight: 600, textDecoration: "none" }}>← Back to store</Link>
       </div>
     );
   }
 
   const stock = stockMap[product.id] ?? 10;
   const soldOut = stock === 0;
+  const lowStock = !soldOut && stock <= 3;
   const inCart = cartItems.some((i) => i.product.id === product.id);
 
   function handleAdd() {
@@ -46,53 +41,57 @@ export function ProductDetail({ onAddToCart, cartItems, stockMap }: Props) {
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-10">
-      <Link to="/" className="inline-flex items-center gap-1 text-indigo-600 text-sm font-medium hover:underline mb-6">
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+    <div style={{ maxWidth: "1100px", margin: "0 auto", padding: "40px 32px" }}>
+      <Link to="/" style={{ display: "inline-flex", alignItems: "center", gap: "6px", color: "var(--text-secondary)", fontSize: "13px", fontWeight: 500, textDecoration: "none", marginBottom: "32px" }}>
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
         All Products
       </Link>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "48px", alignItems: "start" }}>
         {/* Image */}
-        <div className="rounded-3xl overflow-hidden bg-gray-100 shadow-sm">
+        <div style={{ background: "var(--surface)", borderRadius: "16px", overflow: "hidden", border: "1px solid var(--border)" }}>
           <img
-            src={product.image}
-            alt={product.name}
-            className={`w-full h-96 object-cover ${soldOut ? "opacity-40 grayscale" : ""}`}
+            src={product.image} alt={product.name}
+            style={{ width: "100%", height: "420px", objectFit: "cover", display: "block", opacity: soldOut ? 0.4 : 1, filter: soldOut ? "grayscale(1)" : "none" }}
           />
         </div>
 
         {/* Info */}
-        <div className="flex flex-col gap-4">
-          <div>
-            <span className="text-xs font-bold text-indigo-500 uppercase tracking-widest">{product.category}</span>
+        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-secondary)" }}>{product.category}</span>
             {product.badge && (
-              <span className="ml-2 bg-indigo-100 text-indigo-700 text-xs font-bold px-2 py-0.5 rounded-full">{product.badge}</span>
+              <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--accent)", display: "flex", alignItems: "center", gap: "4px" }}>● {product.badge}</span>
             )}
           </div>
 
-          <h1 className="text-3xl font-extrabold text-gray-900 leading-tight">{product.name}</h1>
+          <h1 style={{ fontSize: "2.1rem", fontWeight: 800, color: "var(--text-primary)", lineHeight: 1.1, letterSpacing: "-0.035em", margin: 0 }}>{product.name}</h1>
 
-          <div className="flex items-center gap-2">
-            <span className="text-yellow-400 text-lg">{"★".repeat(Math.floor(product.rating))}</span>
-            <span className="text-gray-500 text-sm font-medium">{product.rating} · {product.reviews.toLocaleString()} reviews</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", color: "var(--text-secondary)" }}>
+            <span style={{ color: "#f59e0b" }}>{"★".repeat(Math.floor(product.rating))}</span>
+            {product.rating} · {product.reviews.toLocaleString()} reviews
           </div>
 
-          <p className="text-gray-500 text-sm leading-relaxed">{product.description}</p>
+          <p style={{ fontSize: "14px", color: "var(--text-secondary)", lineHeight: 1.75, margin: 0 }}>{product.description}</p>
 
-          <div className="flex items-baseline gap-3 mt-1">
-            <span className="text-4xl font-extrabold text-gray-900">Rs.{product.price.toLocaleString("en-IN")}</span>
+          <p style={{ fontSize: "2.6rem", fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.045em", lineHeight: 1, margin: 0 }}>
+            Rs.{product.price.toLocaleString("en-IN")}
+          </p>
+
+          {/* Stock status */}
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", fontWeight: 600, color: soldOut ? "var(--danger)" : lowStock ? "#f59e0b" : "var(--accent)" }}>
+            ● {soldOut ? "Out of Stock" : lowStock ? `Only ${stock} units left` : `In Stock — ${stock} units`}
           </div>
-
-          <StockPill stock={stock} />
 
           {!soldOut && (
-            <div className="flex items-center gap-3">
-              <label className="text-sm text-gray-600 font-medium">Qty</label>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <label style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: 500 }}>Qty</label>
               <select
                 value={qty}
-                onChange={(e) => setQty(Number(e.target.value))}
-                className="border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                onChange={e => setQty(Number(e.target.value))}
+                style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px", padding: "8px 14px", fontSize: "14px", color: "var(--text-primary)", cursor: "pointer", fontFamily: "inherit" }}
               >
                 {Array.from({ length: Math.min(stock, 5) }, (_, i) => i + 1).map(n => (
                   <option key={n}>{n}</option>
@@ -102,27 +101,20 @@ export function ProductDetail({ onAddToCart, cartItems, stockMap }: Props) {
           )}
 
           <button
-            onClick={handleAdd}
-            disabled={soldOut}
-            className={`py-4 px-8 rounded-2xl font-bold text-base transition-all ${
-              soldOut
-                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                : inCart
-                ? "bg-emerald-100 text-emerald-700"
-                : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-md hover:shadow-lg"
-            }`}
+            onClick={handleAdd} disabled={soldOut}
+            style={{ padding: "15px 24px", borderRadius: "8px", fontSize: "15px", fontWeight: 700, border: "none", cursor: soldOut ? "not-allowed" : "pointer", fontFamily: "inherit", background: soldOut ? "var(--raised)" : inCart ? "var(--accent-muted)" : "var(--accent)", color: soldOut ? "var(--text-secondary)" : inCart ? "var(--accent)" : "white" }}
           >
-            {soldOut ? "Out of Stock" : inCart ? "Added to Cart" : "Add to Cart"}
+            {soldOut ? "Out of Stock" : inCart ? "✓ Added to Cart" : "Add to Cart"}
           </button>
 
-          {/* Trust Badges */}
-          <div className="flex gap-3 flex-wrap pt-2">
+          {/* Trust badges */}
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
             {[
               { icon: "🚚", label: "Free Delivery" },
               { icon: "↩️", label: "10-day Returns" },
               { icon: "🛡️", label: "1 Year Warranty" },
             ].map(b => (
-              <div key={b.label} className="flex items-center gap-1.5 bg-gray-50 rounded-xl px-3 py-2 text-xs font-medium text-gray-600 border border-gray-100">
+              <div key={b.label} style={{ display: "flex", alignItems: "center", gap: "6px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px", padding: "8px 12px", fontSize: "12px", fontWeight: 500, color: "var(--text-secondary)" }}>
                 <span>{b.icon}</span> {b.label}
               </div>
             ))}

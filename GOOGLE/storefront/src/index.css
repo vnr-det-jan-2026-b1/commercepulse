@@ -1,4 +1,98 @@
 @import "tailwindcss";
 
-* { box-sizing: border-box; }
-body { margin: 0; font-family: system-ui, sans-serif; background: #f8f9fa; }
+/* ── Design tokens ── */
+:root {
+  --bg:             #fafafa;
+  --surface:        #ffffff;
+  --raised:         #f5f5f5;
+  --border:         rgba(0, 0, 0, 0.07);
+  --text-primary:   #111111;
+  --text-secondary: #6b6b6b;
+  --accent:         #16a34a;
+  --accent-muted:   rgba(22, 163, 74, 0.10);
+  --danger:         #ef4444;
+  --nav-bg:         #ffffff;
+}
+
+:root[data-theme="dark"] {
+  --bg:             #0c0c0c;
+  --surface:        #161616;
+  --raised:         #1e1e1e;
+  --border:         rgba(255, 255, 255, 0.08);
+  --text-primary:   #f0f0f0;
+  --text-secondary: #737373;
+  --accent:         #22c55e;
+  --accent-muted:   rgba(34, 197, 94, 0.10);
+  --danger:         #ef4444;
+  --nav-bg:         #111111;
+}
+
+/* ── Tailwind v4 custom tokens ── */
+@theme {
+  --color-bg:        var(--bg);
+  --color-surface:   var(--surface);
+  --color-raised:    var(--raised);
+  --color-primary:   var(--text-primary);
+  --color-secondary: var(--text-secondary);
+  --color-accent:    var(--accent);
+  --color-danger:    var(--danger);
+  --font-sans:       'Inter', system-ui, sans-serif;
+}
+
+/* ── Base ── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  transition: background-color 200ms ease, border-color 200ms ease, color 200ms ease;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Noise overlay dark mode ── */
+:root[data-theme="dark"] #root::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9998;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+/* ── Stagger fade-up animation ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.stagger > * { animation: fadeUp 300ms ease both; }
+.stagger > *:nth-child(1)  { animation-delay: 0ms; }
+.stagger > *:nth-child(2)  { animation-delay: 50ms; }
+.stagger > *:nth-child(3)  { animation-delay: 100ms; }
+.stagger > *:nth-child(4)  { animation-delay: 150ms; }
+.stagger > *:nth-child(5)  { animation-delay: 200ms; }
+.stagger > *:nth-child(6)  { animation-delay: 250ms; }
+.stagger > *:nth-child(7)  { animation-delay: 300ms; }
+.stagger > *:nth-child(8)  { animation-delay: 350ms; }
+.stagger > *:nth-child(9)  { animation-delay: 400ms; }
+.stagger > *:nth-child(10) { animation-delay: 450ms; }
+.stagger > *:nth-child(11) { animation-delay: 500ms; }
+.stagger > *:nth-child(12) { animation-delay: 550ms; }
+
+button {
+  transition: transform 150ms ease, background-color 200ms ease,
+              border-color 200ms ease, color 200ms ease;
+}
+button:active { transform: scale(0.97); }
+
+select { color-scheme: dark light; }
