@@ -55,6 +55,51 @@ export interface Funnel {
   purchases: number;
 }
 
+export interface PricingMargin {
+  sku: string;
+  marketplace: string;
+  selling_price: number;
+  cost_price: number;
+  mrp: number;
+  commission_pct: number;
+  commission_amount: number;
+  discount_percentage: number;
+  net_margin: number;
+  margin_pct: number;
+  snapshot_date: string;
+}
+
+export interface RevenueRow {
+  marketplace: string;
+  gross_revenue: number;
+  net_revenue: number;
+  total_discount: number;
+  total_orders: number;
+  delivered_orders: number;
+  cancelled_orders: number;
+  returned_orders: number;
+  avg_order_value: number;
+}
+
+export interface InventoryAlert {
+  sku: string;
+  marketplace: string;
+  available_stock: number;
+  reserved_stock: number;
+  reorder_threshold: number;
+  days_until_stockout: number;
+  recommended_reorder_qty: number;
+  risk_level: string;
+  score_date: string;
+}
+
+export interface RestockHistoryEntry {
+  product_id: string;
+  product_name: string;
+  quantity: number;
+  timestamp: string;
+}
+
 export interface StorefrontData {
   seller_id: string;
   period_days: number;

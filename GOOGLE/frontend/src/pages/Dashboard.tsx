@@ -3,10 +3,10 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell,
 } from 'recharts';
-import { useStorefront, useRecommendations, useStock, useRestock } from '../hooks/useAnalytics';
-import type { Recommendation, StockItem } from '../types';
+import { useStorefront, useRecommendations, useStock, useRestock, usePricingMargins, useRevenue, useInventoryAlerts, getRestockHistory, clearRestockHistory } from '../hooks/useAnalytics';
+import type { Recommendation, StockItem, PricingMargin, RevenueRow, InventoryAlert, RestockHistoryEntry } from '../types';
 
-type Tab = 'overview' | 'analytics' | 'recommendations' | 'inventory' | 'products';
+type Tab = 'overview' | 'analytics' | 'recommendations' | 'inventory' | 'products' | 'margins';
 type FilterMode = '1d-hourly' | '7d' | '30d';
 
 function modeToParams(mode: FilterMode): { days: number; granularity: 'day' | 'hour' } {
@@ -32,6 +32,7 @@ function IconAnalytics()  { return <svg width="16" height="16" fill="none" strok
 function IconRecs()       { return <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>; }
 function IconInventory()  { return <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>; }
 function IconProducts()   { return <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>; }
+function IconMargins()    { return <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>; }
 
 const NAV_ITEMS: { id: Tab; label: string; Icon: () => JSX.Element }[] = [
   { id: 'overview',        label: 'Overview',        Icon: IconOverview },
@@ -39,6 +40,7 @@ const NAV_ITEMS: { id: Tab; label: string; Icon: () => JSX.Element }[] = [
   { id: 'recommendations', label: 'Recommendations', Icon: IconRecs },
   { id: 'inventory',       label: 'Stock Room',      Icon: IconInventory },
   { id: 'products',        label: 'Products',        Icon: IconProducts },
+  { id: 'margins',         label: 'Margins',         Icon: IconMargins },
 ];
 
 // ── ThemeToggle ────────────────────────────────────────────────────────
@@ -99,17 +101,30 @@ export default function Dashboard() {
   const [restockQty, setRestockQty] = useState<Record<string, number>>({});
   const [restockDone, setRestockDone] = useState<Record<string, number>>({});
   const [restockError, setRestockError] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState<RestockHistoryEntry[]>(() => getRestockHistory());
   const restock = useRestock();
+  const { data: marginsData } = usePricingMargins();
+  const { data: alertsData } = useInventoryAlerts();
+  const { days: modeDays } = modeToParams(mode);
+  const { data: revenueData } = useRevenue(modeDays);
+
+  const margins: PricingMargin[] = marginsData?.data ?? [];
+  const alerts: InventoryAlert[] = alertsData?.alerts ?? [];
+  const revenue: RevenueRow[] = revenueData?.data ?? [];
 
   const getQty = (productId: string, fallback = 10) =>
     restockQty[productId] ?? fallback;
 
-  const handleRestock = (productId: string) => {
+  const handleRestock = (productId: string, productName: string) => {
     const qty = getQty(productId);
     if (qty < 1) return;
     setRestockError(null);
-    restock.mutate({ productId, quantity: qty }, {
-      onSuccess: () => setRestockDone(prev => ({ ...prev, [productId]: qty })),
+    restock.mutate({ productId, productName, quantity: qty }, {
+      onSuccess: () => {
+        setRestockDone(prev => ({ ...prev, [productId]: qty }));
+        setHistory(getRestockHistory());
+      },
     });
   };
 
@@ -223,6 +238,7 @@ export default function Dashboard() {
               {tab === 'recommendations' && 'Demand-based product insights'}
               {tab === 'inventory'       && 'Stock levels and restock management'}
               {tab === 'products'        && 'Inventory and performance metrics'}
+              {tab === 'margins'         && 'Product pricing and margin analysis'}
             </p>
           </div>
         </div>
@@ -400,6 +416,42 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
+
+              {/* Revenue by Marketplace */}
+              {revenue.length > 0 && (
+                <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '22px' }}>
+                  <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 18px' }}>Revenue by Marketplace</p>
+                  <ResponsiveContainer width="100%" height={180}>
+                    <BarChart data={revenue} margin={{ top: 0, right: 8, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                      <XAxis dataKey="marketplace" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} width={48} tickFormatter={(v: number) => `₹${(v/1000).toFixed(0)}K`} />
+                      <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`₹${Number(v).toLocaleString('en-IN')}`, 'Revenue']} />
+                      <Bar dataKey="gross_revenue" fill="var(--accent)" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', marginTop: '16px' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                        {['Marketplace', 'Orders', 'Avg Order', 'Cancelled', 'Returned'].map(h => (
+                          <th key={h} style={{ padding: '8px 12px', textAlign: h === 'Marketplace' ? 'left' : 'right', fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {revenue.map((r: RevenueRow, i: number) => (
+                        <tr key={r.marketplace} style={{ borderBottom: i < revenue.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                          <td style={{ padding: '8px 12px', fontWeight: 500, color: 'var(--text-primary)', textTransform: 'capitalize' }}>{r.marketplace}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-secondary)' }}>{r.total_orders}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-primary)', fontWeight: 600 }}>₹{(r.avg_order_value ?? 0).toLocaleString('en-IN')}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', color: r.cancelled_orders > 0 ? 'var(--danger)' : 'var(--text-secondary)' }}>{r.cancelled_orders}</td>
+                          <td style={{ padding: '8px 12px', textAlign: 'right', color: r.returned_orders > 0 ? 'var(--amber)' : 'var(--text-secondary)' }}>{r.returned_orders}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 
@@ -547,6 +599,19 @@ export default function Dashboard() {
                             </div>
                           </div>
 
+                          {(() => {
+                            const alert = alerts.find((a: InventoryAlert) => a.sku === p.product_id);
+                            if (!alert) return null;
+                            const daysColor = alert.days_until_stockout <= 3 ? 'var(--danger)' : alert.days_until_stockout <= 7 ? 'var(--amber)' : 'var(--text-secondary)';
+                            return (
+                              <div style={{ fontSize: '11px', color: daysColor, fontWeight: 600, marginBottom: '10px', display: 'flex', gap: '10px' }}>
+                                <span>⚠ {alert.days_until_stockout} days until stockout</span>
+                                <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>·</span>
+                                <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>Recommended reorder: {alert.recommended_reorder_qty} units</span>
+                              </div>
+                            );
+                          })()}
+
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{p.units_sold} sold</span>
                             <span style={{ marginLeft: 'auto' }} />
@@ -563,7 +628,7 @@ export default function Dashboard() {
                                   style={{ width: '64px', padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--raised)', color: 'var(--text-primary)', fontSize: '13px', fontFamily: 'inherit', textAlign: 'center' }}
                                 />
                                 <button
-                                  onClick={() => handleRestock(p.product_id)}
+                                  onClick={() => handleRestock(p.product_id, p.product_name)}
                                   disabled={restock.isPending || p.current_stock >= 10}
                                   style={{ padding: '7px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: p.current_stock >= 10 ? 'not-allowed' : 'pointer', background: p.current_stock >= 10 ? 'var(--raised)' : 'var(--accent)', color: p.current_stock >= 10 ? 'var(--text-secondary)' : 'white', fontFamily: 'inherit', opacity: restock.isPending ? 0.6 : 1 }}
                                 >
@@ -636,7 +701,7 @@ export default function Dashboard() {
                                         style={{ width: '48px', padding: '4px 6px', borderRadius: '5px', border: '1px solid var(--border)', background: 'var(--raised)', color: 'var(--text-primary)', fontSize: '11px', fontFamily: 'inherit', textAlign: 'center' }}
                                       />
                                       <button
-                                        onClick={() => handleRestock(p.product_id)}
+                                        onClick={() => handleRestock(p.product_id, p.product_name)}
                                         disabled={restock.isPending || p.current_stock >= 10}
                                         style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, border: 'none', cursor: p.current_stock >= 10 ? 'not-allowed' : 'pointer', background: p.current_stock >= 10 ? 'var(--raised)' : 'var(--accent)', color: p.current_stock >= 10 ? 'var(--text-secondary)' : 'white', fontFamily: 'inherit', opacity: restock.isPending ? 0.6 : 1 }}
                                       >
@@ -660,6 +725,60 @@ export default function Dashboard() {
               {stock.length === 0 && criticalStockItems.length === 0 && (
                 <div style={{ textAlign: 'center', paddingTop: '60px', color: 'var(--text-secondary)', fontSize: '14px' }}>No stock data yet.</div>
               )}
+
+              {/* Restock History Log */}
+              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden' }}>
+                <div
+                  onClick={() => setHistoryOpen(o => !o)}
+                  style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>Restock History</p>
+                    {history.length > 0 && (
+                      <span style={{ fontSize: '11px', fontWeight: 700, background: 'var(--accent-muted)', color: 'var(--accent)', borderRadius: '6px', padding: '2px 8px' }}>{history.length}</span>
+                    )}
+                  </div>
+                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{historyOpen ? '▲' : '▼'}</span>
+                </div>
+                {historyOpen && (
+                  <div style={{ borderTop: '1px solid var(--border)' }}>
+                    {history.length === 0 ? (
+                      <p style={{ padding: '20px', textAlign: 'center', fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>No restock activity yet.</p>
+                    ) : (
+                      <>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                          <thead>
+                            <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                              {['Time', 'Product', 'Units Added'].map(h => (
+                                <th key={h} style={{ padding: '10px 16px', textAlign: h === 'Units Added' ? 'right' : 'left', fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {history.map((e: RestockHistoryEntry, i: number) => (
+                              <tr key={i} style={{ borderBottom: i < history.length - 1 ? '1px solid var(--border)' : 'none', background: i % 2 === 1 ? 'var(--raised)' : 'transparent' }}>
+                                <td style={{ padding: '10px 16px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                                  {new Date(e.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {new Date(e.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                                </td>
+                                <td style={{ padding: '10px 16px', fontWeight: 500, color: 'var(--text-primary)' }}>{e.product_name}</td>
+                                <td style={{ padding: '10px 16px', textAlign: 'right', fontWeight: 700, color: 'var(--accent)' }}>+{e.quantity}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'flex-end' }}>
+                          <button
+                            onClick={() => { clearRestockHistory(); setHistory([]); }}
+                            style={{ fontSize: '12px', color: 'var(--danger)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500 }}
+                          >
+                            Clear History
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -739,6 +858,79 @@ export default function Dashboard() {
                       </tbody>
                     </table>
                   </div>
+                </div>
+              )}
+            </div>
+          )}
+          {/* ── MARGINS ── */}
+          {tab === 'margins' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+              {/* Summary KPIs */}
+              {margins.length > 0 && (() => {
+                const avg = margins.reduce((s: number, m: PricingMargin) => s + (m.margin_pct ?? 0), 0) / margins.length;
+                const best = [...margins].sort((a, b) => (b.margin_pct ?? 0) - (a.margin_pct ?? 0))[0];
+                const worst = [...margins].sort((a, b) => (a.margin_pct ?? 0) - (b.margin_pct ?? 0))[0];
+                return (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+                    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '18px 20px' }}>
+                      <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>Avg Margin</p>
+                      <p style={{ fontSize: '2rem', fontWeight: 800, color: avg >= 30 ? 'var(--accent)' : avg >= 15 ? 'var(--amber)' : 'var(--danger)', margin: 0, letterSpacing: '-0.04em' }}>{avg.toFixed(1)}%</p>
+                    </div>
+                    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '18px 20px' }}>
+                      <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>Best Margin</p>
+                      <p style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--accent)', margin: 0, letterSpacing: '-0.04em' }}>{(best.margin_pct ?? 0).toFixed(1)}%</p>
+                      <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '4px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{best.sku}</p>
+                    </div>
+                    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '18px 20px' }}>
+                      <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>Lowest Margin</p>
+                      <p style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--danger)', margin: 0, letterSpacing: '-0.04em' }}>{(worst.margin_pct ?? 0).toFixed(1)}%</p>
+                      <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '4px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{worst.sku}</p>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Margins Table */}
+              {margins.length === 0 ? (
+                <div style={{ textAlign: 'center', paddingTop: '60px', color: 'var(--text-secondary)', fontSize: '14px' }}>No pricing data yet.</div>
+              ) : (
+                <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                        {['Product / SKU', 'Selling Price', 'Cost', 'MRP', 'Margin %', 'Commission %', 'Discount %'].map(h => (
+                          <th key={h} style={{ padding: '12px 16px', textAlign: h === 'Product / SKU' ? 'left' : 'right', fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...margins].sort((a, b) => (a.margin_pct ?? 0) - (b.margin_pct ?? 0)).map((m: PricingMargin, i: number) => {
+                        const marginColor = (m.margin_pct ?? 0) >= 30 ? 'var(--accent)' : (m.margin_pct ?? 0) >= 15 ? 'var(--amber)' : 'var(--danger)';
+                        return (
+                          <tr key={`${m.sku}-${m.marketplace}`} style={{ borderBottom: '1px solid var(--border)', background: i % 2 === 1 ? 'var(--raised)' : 'transparent' }}>
+                            <td style={{ padding: '12px 16px' }}>
+                              <p style={{ fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>{m.sku}</p>
+                              <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '2px 0 0', textTransform: 'capitalize' }}>{m.marketplace}</p>
+                            </td>
+                            <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--text-primary)', fontWeight: 500 }}>₹{(m.selling_price ?? 0).toLocaleString('en-IN')}</td>
+                            <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--text-secondary)' }}>₹{(m.cost_price ?? 0).toLocaleString('en-IN')}</td>
+                            <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--text-secondary)' }}>₹{(m.mrp ?? 0).toLocaleString('en-IN')}</td>
+                            <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
+                                <div style={{ width: '48px', height: '4px', background: 'var(--raised)', borderRadius: '4px', overflow: 'hidden' }}>
+                                  <div style={{ height: '4px', width: `${Math.min(m.margin_pct ?? 0, 100)}%`, background: marginColor, borderRadius: '4px' }} />
+                                </div>
+                                <span style={{ fontWeight: 700, color: marginColor, minWidth: '40px' }}>{(m.margin_pct ?? 0).toFixed(1)}%</span>
+                              </div>
+                            </td>
+                            <td style={{ padding: '12px 16px', textAlign: 'right', color: 'var(--text-secondary)' }}>{(m.commission_pct ?? 0).toFixed(1)}%</td>
+                            <td style={{ padding: '12px 16px', textAlign: 'right', color: (m.discount_percentage ?? 0) > 20 ? 'var(--amber)' : 'var(--text-secondary)' }}>{(m.discount_percentage ?? 0).toFixed(1)}%</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>

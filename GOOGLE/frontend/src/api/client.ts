@@ -21,3 +21,12 @@ export const fetchRecommendations = (days: number) =>
 
 export const restockProduct = (productId: string, quantity: number) =>
   api.post('/v1/analytics/stock/restock', { seller_id: sellerId, product_id: productId, quantity }).then(r => r.data);
+
+export const fetchPricingMargins = () =>
+  api.get('/v1/analytics/pricing/margins', { params: { seller_id: sellerId } }).then(r => r.data);
+
+export const fetchRevenue = (days: number) =>
+  api.get('/v1/analytics/revenue', { params: { seller_id: sellerId, days } }).then(r => r.data);
+
+export const fetchInventoryAlerts = () =>
+  api.get('/v1/analytics/inventory/alerts', { params: { seller_id: sellerId } }).then(r => r.data);

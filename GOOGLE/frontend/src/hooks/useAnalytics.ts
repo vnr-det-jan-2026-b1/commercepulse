@@ -1,19 +1,36 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { fetchStorefront, fetchStock, fetchRecommendations, restockProduct } from '../api/client';
-import type { StorefrontData, StockItem, Recommendation } from '../types';
+import { fetchStorefront, fetchStock, fetchRecommendations, restockProduct, fetchPricingMargins, fetchRevenue, fetchInventoryAlerts } from '../api/client';
+import type { StorefrontData, StockItem, Recommendation, PricingMargin, RevenueRow, InventoryAlert, RestockHistoryEntry } from '../types';
 
 // ── Restock adjustments persisted in localStorage ──────────────────────────
 const RESTOCK_KEY = 'nova-restock-adjustments';
+const HISTORY_KEY = 'nova-restock-history';
 
 function getAdjustments(): Record<string, number> {
   try { return JSON.parse(localStorage.getItem(RESTOCK_KEY) || '{}'); }
   catch { return {}; }
 }
 
-function saveAdjustment(productId: string, qty: number) {
+function saveAdjustment(productId: string, productName: string, qty: number) {
   const adj = getAdjustments();
   adj[productId] = (adj[productId] || 0) + qty;
   localStorage.setItem(RESTOCK_KEY, JSON.stringify(adj));
+
+  // Append to history log
+  try {
+    const history: RestockHistoryEntry[] = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+    history.unshift({ product_id: productId, product_name: productName, quantity: qty, timestamp: new Date().toISOString() });
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  } catch { /* ignore */ }
+}
+
+export function getRestockHistory(): RestockHistoryEntry[] {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); }
+  catch { return []; }
+}
+
+export function clearRestockHistory() {
+  localStorage.removeItem(HISTORY_KEY);
 }
 
 // Mirrors the server-side CASE logic in RECOMMENDATIONS_SQL
@@ -76,14 +93,35 @@ export const useRecommendations = (days: number) =>
     refetchInterval: 60_000,
   });
 
+export const usePricingMargins = () =>
+  useQuery<{ data: PricingMargin[] }>({
+    queryKey: ['margins'],
+    queryFn: fetchPricingMargins,
+    refetchInterval: 60_000,
+  });
+
+export const useRevenue = (days: number) =>
+  useQuery<{ data: RevenueRow[] }>({
+    queryKey: ['revenue', days],
+    queryFn: () => fetchRevenue(days),
+    refetchInterval: 60_000,
+  });
+
+export const useInventoryAlerts = () =>
+  useQuery<{ alerts: InventoryAlert[] }>({
+    queryKey: ['inventoryAlerts'],
+    queryFn: fetchInventoryAlerts,
+    refetchInterval: 60_000,
+  });
+
 // ── Restock mutation ──────────────────────────────────────────────────────────
 
 export const useRestock = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ productId, quantity }: { productId: string; quantity: number }) => {
+    mutationFn: async ({ productId, productName, quantity }: { productId: string; productName: string; quantity: number }) => {
       // 1. Persist to localStorage — survives page refresh
-      saveAdjustment(productId, quantity);
+      saveAdjustment(productId, productName, quantity);
 
       // 2. Update stock cache immediately
       queryClient.setQueryData(['stock'], (old: { products: StockItem[] } | undefined) => {
