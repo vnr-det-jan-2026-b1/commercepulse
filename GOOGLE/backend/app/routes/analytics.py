@@ -158,7 +158,6 @@ async def product_stock(
         extra = adjustments.get(row["product_id"], 0)
         products.append({
             **row,
-            "initial_stock": row["initial_stock"] + extra,
             "current_stock": row["current_stock"] + extra,
         })
     return {"seller_id": seller_id, "products": products}
@@ -173,7 +172,7 @@ async def restock_product(body: RestockRequest):
     rows = await bq.query(q.PRODUCT_STOCK_SQL, {"seller_id": body.seller_id})
     updated = next((r for r in rows if r["product_id"] == body.product_id), None)
     if updated:
-        updated = {**updated, "initial_stock": updated["initial_stock"] + extra, "current_stock": updated["current_stock"] + extra}
+        updated = {**updated, "current_stock": updated["current_stock"] + extra}
     return {"ok": True, "product_id": body.product_id, "quantity_added": body.quantity, "updated": updated}
 
 
