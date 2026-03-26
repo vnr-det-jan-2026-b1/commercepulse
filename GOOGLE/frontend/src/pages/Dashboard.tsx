@@ -556,16 +556,18 @@ export default function Dashboard() {
                               <>
                                 <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Restock qty:</span>
                                 <input
-                                  type="number" min={1} value={getQty(p.product_id)}
-                                  onChange={e => setRestockQty(prev => ({ ...prev, [p.product_id]: Math.max(1, parseInt(e.target.value) || 1) }))}
+                                  type="number" min={1} max={Math.max(10 - p.current_stock, 0)}
+                                  value={getQty(p.product_id, Math.min(5, Math.max(10 - p.current_stock, 1)))}
+                                  onChange={e => setRestockQty(prev => ({ ...prev, [p.product_id]: Math.min(Math.max(1, parseInt(e.target.value) || 1), Math.max(10 - p.current_stock, 1)) }))}
+                                  disabled={p.current_stock >= 10}
                                   style={{ width: '64px', padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--raised)', color: 'var(--text-primary)', fontSize: '13px', fontFamily: 'inherit', textAlign: 'center' }}
                                 />
                                 <button
                                   onClick={() => handleRestock(p.product_id)}
-                                  disabled={restock.isPending}
-                                  style={{ padding: '7px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', background: 'var(--accent)', color: 'white', fontFamily: 'inherit', opacity: restock.isPending ? 0.6 : 1 }}
+                                  disabled={restock.isPending || p.current_stock >= 10}
+                                  style={{ padding: '7px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: p.current_stock >= 10 ? 'not-allowed' : 'pointer', background: p.current_stock >= 10 ? 'var(--raised)' : 'var(--accent)', color: p.current_stock >= 10 ? 'var(--text-secondary)' : 'white', fontFamily: 'inherit', opacity: restock.isPending ? 0.6 : 1 }}
                                 >
-                                  Confirm Restock
+                                  {p.current_stock >= 10 ? 'Max Stock' : 'Confirm Restock'}
                                 </button>
                               </>
                             )}
@@ -627,14 +629,16 @@ export default function Dashboard() {
                                   ) : (
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}>
                                       <input
-                                        type="number" min={1} value={getQty(p.product_id)}
-                                        onChange={e => setRestockQty(prev => ({ ...prev, [p.product_id]: Math.max(1, parseInt(e.target.value) || 1) }))}
+                                        type="number" min={1} max={Math.max(10 - p.current_stock, 0)}
+                                        value={getQty(p.product_id, Math.min(5, Math.max(10 - p.current_stock, 1)))}
+                                        onChange={e => setRestockQty(prev => ({ ...prev, [p.product_id]: Math.min(Math.max(1, parseInt(e.target.value) || 1), Math.max(10 - p.current_stock, 1)) }))}
+                                        disabled={p.current_stock >= 10}
                                         style={{ width: '48px', padding: '4px 6px', borderRadius: '5px', border: '1px solid var(--border)', background: 'var(--raised)', color: 'var(--text-primary)', fontSize: '11px', fontFamily: 'inherit', textAlign: 'center' }}
                                       />
                                       <button
                                         onClick={() => handleRestock(p.product_id)}
-                                        disabled={restock.isPending}
-                                        style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, border: 'none', cursor: 'pointer', background: 'var(--accent)', color: 'white', fontFamily: 'inherit', opacity: restock.isPending ? 0.6 : 1 }}
+                                        disabled={restock.isPending || p.current_stock >= 10}
+                                        style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, border: 'none', cursor: p.current_stock >= 10 ? 'not-allowed' : 'pointer', background: p.current_stock >= 10 ? 'var(--raised)' : 'var(--accent)', color: p.current_stock >= 10 ? 'var(--text-secondary)' : 'white', fontFamily: 'inherit', opacity: restock.isPending ? 0.6 : 1 }}
                                       >
                                         +Add
                                       </button>

@@ -151,6 +151,7 @@ async def product_stock(
     seller_id: str = Query(...),
     _scope:    str = Depends(enforce_seller_scope),
 ):
+    MAX_STOCK = 10
     rows = await bq.query(q.PRODUCT_STOCK_SQL, {"seller_id": seller_id})
     adjustments = _restock_store.get(seller_id, {})
     products = []
@@ -158,22 +159,29 @@ async def product_stock(
         extra = adjustments.get(row["product_id"], 0)
         products.append({
             **row,
-            "current_stock": row["current_stock"] + extra,
+            "current_stock": min(row["current_stock"] + extra, MAX_STOCK),
         })
     return {"seller_id": seller_id, "products": products}
 
 
 @router.post("/stock/restock")
 async def restock_product(body: RestockRequest):
-    store = _restock_store[body.seller_id]
-    store[body.product_id] = store.get(body.product_id, 0) + body.quantity
-    extra = store[body.product_id]
-    # Return updated stock using the same logic as GET /stock
+    MAX_STOCK = 10
     rows = await bq.query(q.PRODUCT_STOCK_SQL, {"seller_id": body.seller_id})
-    updated = next((r for r in rows if r["product_id"] == body.product_id), None)
-    if updated:
-        updated = {**updated, "current_stock": updated["current_stock"] + extra}
-    return {"ok": True, "product_id": body.product_id, "quantity_added": body.quantity, "updated": updated}
+    product_row = next((r for r in rows if r["product_id"] == body.product_id), None)
+    if not product_row:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    store = _restock_store[body.seller_id]
+    current = min(product_row["current_stock"] + store.get(body.product_id, 0), MAX_STOCK)
+    space   = MAX_STOCK - current
+    if space <= 0:
+        raise HTTPException(status_code=400, detail="Stock is already at maximum (10 units)")
+    allowed = min(body.quantity, space)
+
+    store[body.product_id] = store.get(body.product_id, 0) + allowed
+    updated = {**product_row, "current_stock": current + allowed}
+    return {"ok": True, "product_id": body.product_id, "quantity_added": allowed, "updated": updated}
 
 
 @router.get("/recommendations")

@@ -36,7 +36,7 @@ function applyToStock(products: StockItem[]): StockItem[] {
   return products.map(p => {
     const extra = adj[p.product_id] || 0;
     if (!extra) return p;
-    return { ...p, current_stock: p.current_stock + extra };
+    return { ...p, current_stock: Math.min(p.current_stock + extra, 10) };
   });
 }
 
@@ -92,7 +92,7 @@ export const useRestock = () => {
           ...old,
           products: old.products.map((p: StockItem) =>
             p.product_id === productId
-              ? { ...p, current_stock: p.current_stock + quantity }
+              ? { ...p, current_stock: Math.min(p.current_stock + quantity, 10) }
               : p
           ),
         };
