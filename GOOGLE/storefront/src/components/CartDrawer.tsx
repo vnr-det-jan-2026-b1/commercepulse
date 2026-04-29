@@ -8,11 +8,12 @@ interface Props {
   items: CartItem[];
   total: number;
   onRemove: (id: string) => void;
+  onUpdateQuantity: (id: string, qty: number) => void;
   onClear: () => void;
   onPurchase: () => void;
 }
 
-export function CartDrawer({ open, onClose, items, total, onRemove, onClear, onPurchase }: Props) {
+export function CartDrawer({ open, onClose, items, total, onRemove, onUpdateQuantity, onClear, onPurchase }: Props) {
   const navigate = useNavigate();
 
   function checkout() {
@@ -63,7 +64,17 @@ export function CartDrawer({ open, onClose, items, total, onRemove, onClear, onP
                 <img src={product.image} alt={product.name} style={{ width: "52px", height: "52px", objectFit: "cover", borderRadius: "8px", flexShrink: 0 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{product.name}</p>
-                  <p style={{ fontSize: "12px", color: "var(--text-secondary)", margin: "3px 0" }}>Qty {quantity}</p>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", margin: "6px 0" }}>
+                    <button
+                      onClick={() => onUpdateQuantity(product.id, quantity - 1)}
+                      style={{ width: "24px", height: "24px", borderRadius: "6px", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text-primary)", cursor: "pointer", fontSize: "14px", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "inherit", flexShrink: 0 }}
+                    >−</button>
+                    <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", minWidth: "16px", textAlign: "center" }}>{quantity}</span>
+                    <button
+                      onClick={() => onUpdateQuantity(product.id, quantity + 1)}
+                      style={{ width: "24px", height: "24px", borderRadius: "6px", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text-primary)", cursor: "pointer", fontSize: "14px", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "inherit", flexShrink: 0 }}
+                    >+</button>
+                  </div>
                   <p style={{ fontSize: "13px", fontWeight: 700, color: "var(--accent)", margin: 0 }}>Rs.{(product.price * quantity).toLocaleString("en-IN")}</p>
                 </div>
                 <button

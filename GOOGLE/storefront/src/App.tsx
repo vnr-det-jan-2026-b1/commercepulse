@@ -31,7 +31,7 @@ function ThemeToggle() {
 }
 
 function App() {
-  const { items, add, remove, clear, total, count } = useCart();
+  const { items, add, remove, updateQuantity, clear, total, count } = useCart();
   const [cartOpen, setCartOpen] = useState(false);
   const [stockMap, setStockMap] = useState<StockMap>({});
   const [products, setProducts] = useState<Product[]>([]);
@@ -130,6 +130,7 @@ function App() {
           items={items}
           total={total}
           onRemove={remove}
+          onUpdateQuantity={updateQuantity}
           onClear={clear}
           onPurchase={() => setTimeout(refreshStock, 2000)}
         />
