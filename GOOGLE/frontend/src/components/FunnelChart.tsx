@@ -1,7 +1,7 @@
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
-import type { FunnelDataPoint } from '../types';
+import type { FunnelDataPoint } from '../types/index';
 
 interface Props {
   data: FunnelDataPoint[];

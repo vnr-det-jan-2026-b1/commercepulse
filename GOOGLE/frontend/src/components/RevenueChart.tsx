@@ -1,7 +1,7 @@
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
-import type { RevenueDataPoint } from '../types';
+import type { RevenueDataPoint } from '../types/index';
 
 interface Props {
   data: RevenueDataPoint[];
@@ -28,7 +28,7 @@ export default function RevenueChart({ data }: Props) {
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
           <XAxis dataKey="date" tick={{ fontSize: 11 }} />
           <YAxis tick={{ fontSize: 11 }} />
-          <Tooltip formatter={(v: number) => [`₹${v.toLocaleString()}`, 'Revenue']} />
+          <Tooltip formatter={(v: unknown) => [`₹${Number(v).toLocaleString()}`, 'Revenue']} />
           <Area type="monotone" dataKey="revenue" stroke="#3b82f6" fill="url(#rev)" strokeWidth={2} />
         </AreaChart>
       </ResponsiveContainer>

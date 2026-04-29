@@ -100,6 +100,19 @@ export interface RestockHistoryEntry {
   timestamp: string;
 }
 
+export interface FunnelDataPoint {
+  metric_date?: string;
+  impressions: number;
+  clicks: number;
+  add_to_cart: number;
+  purchases: number;
+}
+
+export interface RevenueDataPoint {
+  order_date?: string;
+  daily_revenue?: number;
+}
+
 export interface StorefrontData {
   seller_id: string;
   period_days: number;

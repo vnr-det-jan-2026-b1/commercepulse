@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactElement } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell,
@@ -34,7 +34,7 @@ function IconInventory()  { return <svg width="16" height="16" fill="none" strok
 function IconProducts()   { return <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>; }
 function IconMargins()    { return <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>; }
 
-const NAV_ITEMS: { id: Tab; label: string; Icon: () => JSX.Element }[] = [
+const NAV_ITEMS: { id: Tab; label: string; Icon: () => ReactElement }[] = [
   { id: 'overview',        label: 'Overview',        Icon: IconOverview },
   { id: 'analytics',       label: 'Analytics',       Icon: IconAnalytics },
   { id: 'recommendations', label: 'Recommendations', Icon: IconRecs },
