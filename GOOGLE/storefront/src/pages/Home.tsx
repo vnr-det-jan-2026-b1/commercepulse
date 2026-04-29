@@ -1,27 +1,37 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { products, CATEGORIES } from "../data/products";
+import { CATEGORIES } from "../data/products";
+import type { Product } from "../data/products";
 import { tracker } from "../utils/tracker";
 import type { CartItem } from "../store/cart";
 import type { StockMap } from "../App";
 
 interface Props {
-  onAddToCart: (product: (typeof products)[0]) => void;
+  products: Product[];
+  onAddToCart: (product: Product) => void;
   cartItems: CartItem[];
   stockMap: StockMap;
 }
 
-const HERO_ID = "P006"; // Headphones — dramatic on black
+const HERO_ID = "P006";
 
-export function Home({ onAddToCart, cartItems, stockMap }: Props) {
+export function Home({ products, onAddToCart, cartItems, stockMap }: Props) {
   const [activeCategory, setActiveCategory] = useState<string>("All");
-  const hero = products.find(p => p.id === HERO_ID)!;
+  const hero = products.find(p => p.id === HERO_ID) ?? products[0];
 
   useEffect(() => { tracker.pageView(); }, []);
 
   const filtered = activeCategory === "All"
     ? products
     : products.filter(p => p.category === activeCategory);
+
+  if (!hero) {
+    return (
+      <div style={{ minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <p style={{ color: "var(--text-secondary)", fontSize: "14px" }}>Loading products…</p>
+      </div>
+    );
+  }
 
   return (
     <div>

@@ -10,7 +10,7 @@ from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.sensors.external_task import ExternalTaskSensor
 
-PROJECT = os.getenv("GCP_PROJECT", "commercepulse-prod")
+PROJECT = os.getenv("GCP_PROJECT", "commercepulse-project")
 
 DEFAULT_ARGS = {
     "owner":            "commercepulse-google-squad",

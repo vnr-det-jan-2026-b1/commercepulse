@@ -184,6 +184,15 @@ async def restock_product(body: RestockRequest):
     return {"ok": True, "product_id": body.product_id, "quantity_added": allowed, "updated": updated}
 
 
+@router.get("/products")
+async def list_products(
+    seller_id: str = Query(...),
+    _scope:    str = Depends(enforce_seller_scope),
+):
+    rows = await bq.query(q.PRODUCTS_SQL, {"seller_id": seller_id})
+    return {"seller_id": seller_id, "products": rows}
+
+
 @router.get("/recommendations")
 async def product_recommendations(
     seller_id: str = Query(...),

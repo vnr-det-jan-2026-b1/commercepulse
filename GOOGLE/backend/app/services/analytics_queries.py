@@ -315,6 +315,28 @@ ORDER BY current_stock ASC
 """
 
 
+# ── Product Catalog (storefront) ──────────────────────────────
+
+PRODUCTS_SQL = f"""
+SELECT
+  product_id,
+  product_name                                                             AS name,
+  category,
+  CAST(price AS FLOAT64)                                                   AS price,
+  COALESCE(description, '')                                                AS description,
+  COALESCE(
+    image_path,
+    CONCAT('/products/', LOWER(product_id), '.jpg')
+  )                                                                        AS image,
+  COALESCE(CAST(rating AS FLOAT64), 4.0)                                   AS rating,
+  COALESCE(CAST(reviews AS INT64), 0)                                      AS reviews,
+  COALESCE(badge, '')                                                      AS badge
+FROM `{R}.product_catalog`
+WHERE seller_id = @seller_id
+ORDER BY product_id
+"""
+
+
 # ── Restock: DML UPDATE on product_catalog ─────────────────────
 
 RESTOCK_SQL = f"""

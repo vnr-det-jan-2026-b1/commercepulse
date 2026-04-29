@@ -1,17 +1,18 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { products } from "../data/products";
+import type { Product } from "../data/products";
 import { tracker } from "../utils/tracker";
 import type { CartItem } from "../store/cart";
 import type { StockMap } from "../App";
 
 interface Props {
-  onAddToCart: (product: (typeof products)[0]) => void;
+  products: Product[];
+  onAddToCart: (product: Product) => void;
   cartItems: CartItem[];
   stockMap: StockMap;
 }
 
-export function ProductDetail({ onAddToCart, cartItems, stockMap }: Props) {
+export function ProductDetail({ products, onAddToCart, cartItems, stockMap }: Props) {
   const { id } = useParams<{ id: string }>();
   const product = products.find((p) => p.id === id);
   const [qty, setQty] = useState(1);

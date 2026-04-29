@@ -4,7 +4,7 @@ GCS (Excel/CSV) → BigQuery bronze tables via Cloud Dataflow (Apache Beam)
 
 Usage:
     python ingestion_pipeline.py \
-        --project=commercepulse-prod \
+        --project=commercepulse-project \
         --region=asia-south1 \
         --gcs_uri=gs://commercepulse-raw-uploads/seller-001/orders/2026-03-12/orders.xlsx \
         --domain=orders \

@@ -11,7 +11,7 @@ Always-on streaming pipeline that:
 
 Usage:
     python event_pipeline.py \
-        --project=commercepulse-prod \
+        --project=commercepulse-project \
         --region=asia-south1 \
         --runner=DataflowRunner \
         --streaming \

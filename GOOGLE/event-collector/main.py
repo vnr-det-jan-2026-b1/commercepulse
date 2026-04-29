@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="CommercePulse Event Collector", docs_url=None, redoc_url=None)
 
-GCP_PROJECT   = os.getenv("GCP_PROJECT", "commercepulse-prod")
+GCP_PROJECT   = os.getenv("GCP_PROJECT", "commercepulse-project")
 PUBSUB_TOPIC  = os.getenv("PUBSUB_TOPIC", "commercepulse-events")
 SIGNING_SECRET = os.getenv("CP_SIGNING_SECRET", "dev-secret")  # per-seller HMAC secret
 

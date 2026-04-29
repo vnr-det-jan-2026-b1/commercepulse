@@ -34,10 +34,31 @@ function App() {
   const { items, add, remove, clear, total, count } = useCart();
   const [cartOpen, setCartOpen] = useState(false);
   const [stockMap, setStockMap] = useState<StockMap>({});
+  const [products, setProducts] = useState<Product[]>([]);
 
   useEffect(() => {
     const t = localStorage.getItem("nova-theme") ?? "dark";
     document.documentElement.dataset.theme = t;
+  }, []);
+
+  useEffect(() => {
+    fetch(`${API_URL}/v1/analytics/products?seller_id=${SELLER_ID}`)
+      .then(r => r.json())
+      .then(data => {
+        const rows: Product[] = (data.products ?? []).map((p: Record<string, unknown>) => ({
+          id:          p.product_id as string,
+          name:        p.name as string,
+          category:    p.category as string,
+          price:       p.price as number,
+          description: p.description as string,
+          image:       p.image as string,
+          rating:      p.rating as number,
+          reviews:     p.reviews as number,
+          badge:       p.badge as string || undefined,
+        }));
+        setProducts(rows);
+      })
+      .catch(() => {});
   }, []);
 
   function refreshStock() {
@@ -98,8 +119,8 @@ function App() {
         </nav>
 
         <Routes>
-          <Route path="/" element={<Home onAddToCart={handleAddToCart} cartItems={items} stockMap={stockMap} />} />
-          <Route path="/product/:id" element={<ProductDetail onAddToCart={handleAddToCart} cartItems={items} stockMap={stockMap} />} />
+          <Route path="/" element={<Home products={products} onAddToCart={handleAddToCart} cartItems={items} stockMap={stockMap} />} />
+          <Route path="/product/:id" element={<ProductDetail products={products} onAddToCart={handleAddToCart} cartItems={items} stockMap={stockMap} />} />
           <Route path="/confirmed" element={<OrderConfirmed />} />
         </Routes>
 

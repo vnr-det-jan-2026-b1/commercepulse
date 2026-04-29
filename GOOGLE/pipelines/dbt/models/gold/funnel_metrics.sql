@@ -11,25 +11,19 @@
 }}
 
 WITH event_funnel AS (
-  -- From streaming user events
+  -- Placeholder: streaming user_events not yet available
   SELECT
-    seller_id,
-    product_sku                           AS sku,
-    marketplace,
-    event_date                            AS metric_date,
-    COUNTIF(event_type = 'product_view')  AS product_views,
-    COUNTIF(event_type = 'add_to_cart')   AS add_to_cart,
-    COUNTIF(event_type = 'checkout_start')AS checkout_starts,
-    COUNTIF(event_type = 'purchase')      AS purchases,
-    COUNT(DISTINCT session_id)            AS unique_sessions,
-    AVG(TIMESTAMP_DIFF(
-      MAX(event_timestamp) OVER (PARTITION BY session_id),
-      MIN(event_timestamp) OVER (PARTITION BY session_id),
-      SECOND
-    ))                                    AS avg_session_duration_sec
-  FROM {{ source('cp_raw', 'user_events') }}
-  WHERE product_sku IS NOT NULL
-  GROUP BY 1, 2, 3, 4
+    CAST(NULL AS STRING)  AS seller_id,
+    CAST(NULL AS STRING)  AS sku,
+    CAST(NULL AS STRING)  AS marketplace,
+    CAST(NULL AS DATE)    AS metric_date,
+    0                     AS product_views,
+    0                     AS add_to_cart,
+    0                     AS checkout_starts,
+    0                     AS purchases,
+    0                     AS unique_sessions,
+    CAST(NULL AS FLOAT64) AS avg_session_duration_sec
+  FROM (SELECT 1) WHERE FALSE
 ),
 
 traffic_funnel AS (

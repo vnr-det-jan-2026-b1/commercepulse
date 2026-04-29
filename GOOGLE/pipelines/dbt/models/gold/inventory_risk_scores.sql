@@ -41,14 +41,12 @@ avg_daily_sales AS (
 ),
 
 forecast AS (
-  -- Join with ML demand forecast if available
+  -- Placeholder: ML demand_forecasts not yet available
   SELECT
-    seller_id,
-    sku,
-    SUM(predicted_units) AS forecast_14d_units
-  FROM {{ source('cp_ml', 'demand_forecasts') }}
-  WHERE forecast_date BETWEEN CURRENT_DATE() AND DATE_ADD(CURRENT_DATE(), INTERVAL 14 DAY)
-  GROUP BY 1, 2
+    CAST(NULL AS STRING) AS seller_id,
+    CAST(NULL AS STRING) AS sku,
+    0                    AS forecast_14d_units
+  FROM (SELECT 1) WHERE FALSE
 )
 
 SELECT

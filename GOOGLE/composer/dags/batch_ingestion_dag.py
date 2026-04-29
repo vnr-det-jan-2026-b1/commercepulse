@@ -12,7 +12,7 @@ from airflow.operators.python import PythonOperator
 from airflow.providers.google.cloud.operators.dataflow import DataflowStartFlexTemplateOperator
 from airflow.providers.google.cloud.sensors.pubsub import PubSubPullSensor
 
-PROJECT  = os.getenv("GCP_PROJECT", "commercepulse-prod")
+PROJECT  = os.getenv("GCP_PROJECT", "commercepulse-project")
 REGION   = os.getenv("GCP_REGION",  "asia-south1")
 TEMPLATE = f"gs://commercepulse-dataflow-staging-prod/templates/batch-ingestion"
 TRIGGER_SUBSCRIPTION = f"projects/{PROJECT}/subscriptions/commercepulse-batch-triggers-sub"

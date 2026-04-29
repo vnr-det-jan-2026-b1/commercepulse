@@ -16,7 +16,7 @@ from kfp import dsl
 from kfp.v2 import compiler
 from google.cloud import aiplatform
 
-PROJECT  = os.getenv("GCP_PROJECT", "commercepulse-prod")
+PROJECT  = os.getenv("GCP_PROJECT", "commercepulse-project")
 LOCATION = os.getenv("GCP_REGION",  "asia-south1")
 PIPELINE_ROOT = f"gs://commercepulse-artifacts-prod/pipelines/demand-forecast"
 

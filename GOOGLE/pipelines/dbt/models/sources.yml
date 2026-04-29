@@ -1,0 +1,24 @@
+version: 2
+
+sources:
+  - name: cp_raw_ingestion
+    database: commercepulse-project
+    schema: cp_raw
+    tables:
+      - name: orders
+      - name: inventory
+      - name: logistics
+      - name: traffic
+      - name: pricing
+
+  - name: cp_raw
+    database: commercepulse-project
+    schema: cp_raw
+    tables:
+      - name: user_events
+
+  - name: cp_ml
+    database: commercepulse-project
+    schema: cp_ml
+    tables:
+      - name: demand_forecasts

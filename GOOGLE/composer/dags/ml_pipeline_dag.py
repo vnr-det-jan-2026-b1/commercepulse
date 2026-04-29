@@ -11,7 +11,7 @@ from airflow.providers.google.cloud.operators.vertex_ai.pipeline_job import (
     RunPipelineJobOperator,
 )
 
-PROJECT  = os.getenv("GCP_PROJECT", "commercepulse-prod")
+PROJECT  = os.getenv("GCP_PROJECT", "commercepulse-project")
 REGION   = os.getenv("GCP_REGION",  "asia-south1")
 SA       = f"sa-vertex-pipelines@{PROJECT}.iam.gserviceaccount.com"
 ROOT     = f"gs://commercepulse-artifacts-prod/pipelines"

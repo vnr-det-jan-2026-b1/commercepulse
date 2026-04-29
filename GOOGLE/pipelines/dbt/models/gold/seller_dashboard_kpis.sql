@@ -41,7 +41,7 @@ inventory_kpis AS (
 logistics_kpis AS (
   SELECT
     seller_id,
-    SAFE_DIVIDE(COUNTIF(rto_flag), COUNT(*)) AS rto_rate
+    SAFE_DIVIDE(SUM(rto_count), NULLIF(SUM(total_shipments), 0)) AS rto_rate
   FROM {{ ref('logistics_metrics') }}
   WHERE snapshot_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
   GROUP BY 1
