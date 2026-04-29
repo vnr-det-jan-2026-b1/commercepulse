@@ -8,7 +8,7 @@ steps:
       - "asia-south1-docker.pkg.dev/$PROJECT_ID/commercepulse-images/event-collector:$SHORT_SHA"
       - -t
       - "asia-south1-docker.pkg.dev/$PROJECT_ID/commercepulse-images/event-collector:latest"
-      - GOOGLE/event-collector
+      - event-collector
     waitFor: ["-"]
 
   - name: "gcr.io/cloud-builders/docker"
@@ -27,7 +27,7 @@ steps:
       - "asia-south1-docker.pkg.dev/$PROJECT_ID/commercepulse-images/api:$SHORT_SHA"
       - -t
       - "asia-south1-docker.pkg.dev/$PROJECT_ID/commercepulse-images/api:latest"
-      - GOOGLE/backend
+      - backend
     waitFor: ["-"]
 
   - name: "gcr.io/cloud-builders/docker"
@@ -48,9 +48,9 @@ steps:
       - --image=asia-south1-docker.pkg.dev/$PROJECT_ID/commercepulse-images/event-collector:$SHORT_SHA
       - --region=asia-south1
       - --platform=managed
-      - --min-instances=2
-      - --max-instances=100
-      - --concurrency=1000
+      - --min-instances=0
+      - --max-instances=5
+      - --concurrency=100
       - --memory=512Mi
       - --cpu=1
       - --no-allow-unauthenticated
@@ -70,9 +70,9 @@ steps:
       - --region=asia-south1
       - --platform=managed
       - --min-instances=1
-      - --max-instances=20
+      - --max-instances=10
       - --memory=2Gi
-      - --cpu=2
+      - --cpu=1
       - --concurrency=80
       - --timeout=300
       - --allow-unauthenticated

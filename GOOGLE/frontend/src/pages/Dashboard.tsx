@@ -3,7 +3,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell,
 } from 'recharts';
-import { useStorefront, useRecommendations, useStock, useRestock, usePricingMargins, useRevenue, useInventoryAlerts, getRestockHistory, clearRestockHistory } from '../hooks/useAnalytics';
+import { useStorefront, useRecommendations, useStock, useRestock, usePricingMargins, useRevenue, useInventoryAlerts, useAIBrief, getRestockHistory, clearRestockHistory } from '../hooks/useAnalytics';
 import type { Recommendation, StockItem, PricingMargin, RevenueRow, InventoryAlert, RestockHistoryEntry } from '../types';
 
 type Tab = 'overview' | 'analytics' | 'recommendations' | 'inventory' | 'products' | 'margins';
@@ -103,6 +103,7 @@ export default function Dashboard() {
   const [restockError, setRestockError] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<RestockHistoryEntry[]>(() => getRestockHistory());
+  const [recTabActive, setRecTabActive] = useState(false);
   const restock = useRestock();
   const { data: marginsData } = usePricingMargins();
   const { data: alertsData } = useInventoryAlerts();
@@ -133,10 +134,15 @@ export default function Dashboard() {
     document.documentElement.dataset.theme = t;
   }, []);
 
+  useEffect(() => {
+    if (tab === 'recommendations') setRecTabActive(true);
+  }, [tab]);
+
   const { days, granularity } = modeToParams(mode);
   const { data, isLoading, error } = useStorefront(days, granularity);
   const { data: stockData }        = useStock();
   const { data: recData }          = useRecommendations(recDays);
+  const { data: aiBriefData, isLoading: aiBriefLoading } = useAIBrief(recTabActive);
 
   const overview = data?.overview;
   const funnel   = data?.funnel;
@@ -459,8 +465,63 @@ export default function Dashboard() {
           {tab === 'recommendations' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
+              {/* AI Executive Brief */}
+              <div style={{ background: 'linear-gradient(135deg, var(--accent-muted) 0%, var(--surface) 100%)', border: '1px solid var(--accent)', borderRadius: '12px', padding: '20px 24px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                  <span style={{ fontSize: '16px' }}>✦</span>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Gemini AI Executive Brief</span>
+                  {aiBriefLoading && <span style={{ fontSize: '11px', color: 'var(--text-secondary)', marginLeft: '8px' }}>Generating…</span>}
+                </div>
+                {aiBriefData?.recommendations ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {(() => {
+                      const brief = aiBriefData.recommendations as Record<string, unknown>;
+                      const actions = (brief.ranked_actions ?? []) as Array<Record<string, unknown>>;
+                      return (
+                        <>
+                          {brief.primary_problem_statement && (
+                            <p style={{ fontSize: '13px', color: 'var(--text-primary)', margin: 0, lineHeight: 1.6, fontWeight: 500 }}>
+                              {String(brief.primary_problem_statement)}
+                            </p>
+                          )}
+                          {actions.length > 0 && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
+                              {actions.slice(0, 3).map((a, i) => (
+                                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', background: 'var(--raised)', borderRadius: '8px', padding: '10px 14px' }}>
+                                  <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--accent)', flexShrink: 0, marginTop: '1px' }}>#{i + 1}</span>
+                                  <div style={{ flex: 1 }}>
+                                    <p style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 2px' }}>{String(a.action_name ?? '')}</p>
+                                    <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>{String(a.description ?? '')}</p>
+                                  </div>
+                                  {a.financial_impact_monthly != null && (
+                                    <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--accent)', flexShrink: 0 }}>
+                                      ₹{Number(a.financial_impact_monthly).toLocaleString('en-IN')}
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {brief.confidence_score && (
+                            <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: '4px 0 0' }}>
+                              AI confidence: {(Number(brief.confidence_score) * 100).toFixed(0)}% · Powered by Gemini 1.5 Pro
+                            </p>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                ) : (
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>
+                    {aiBriefLoading ? 'Analyzing your store data with Gemini AI…' : 'AI brief unavailable — per-product insights below are still active.'}
+                  </p>
+                )}
+              </div>
+
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>Demand-based insights per product</p>
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>
+                  Per-product AI insights · {recData?.ai_powered ? '✦ Gemini-powered' : 'Rule-based'}
+                </p>
                 <div style={{ display: 'flex', gap: '6px' }}>
                   {[7, 14, 30].map(d => (
                     <button
@@ -482,16 +543,30 @@ export default function Dashboard() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
                   {sortedRecs.map((rec: Recommendation) => {
                     const meta = REC_META[rec.recommendation] ?? REC_META['MAINTAIN'];
+                    const urgencyColor: Record<string, string> = {
+                      CRITICAL: 'var(--danger)',
+                      HIGH: 'var(--amber)',
+                      MEDIUM: 'var(--accent)',
+                      LOW: 'var(--text-secondary)',
+                    };
+                    const aiColor = rec.ai_urgency ? (urgencyColor[rec.ai_urgency] ?? 'var(--text-secondary)') : meta.dot;
                     return (
                       <div key={rec.product_id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '18px 20px' }}>
-                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', marginBottom: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', marginBottom: '10px' }}>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                              <span style={{ color: meta.dot, fontSize: '8px' }}>●</span>
-                              <span style={{ fontSize: '10px', fontWeight: 700, color: meta.dot, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{meta.label}</span>
+                              <span style={{ color: aiColor, fontSize: '8px' }}>●</span>
+                              <span style={{ fontSize: '10px', fontWeight: 700, color: aiColor, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                                {rec.ai_urgency ?? meta.label}
+                              </span>
+                              {rec.ai_urgency && (
+                                <span style={{ fontSize: '9px', color: 'var(--accent)', fontWeight: 600, letterSpacing: '0.05em' }}>✦ AI</span>
+                              )}
                             </div>
-                            <p style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rec.product_name}</p>
-                            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>{meta.msg}</p>
+                            <p style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rec.product_name}</p>
+                            <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+                              {rec.ai_insight ?? meta.msg}
+                            </p>
                           </div>
                           <div style={{ textAlign: 'right', flexShrink: 0 }}>
                             <p style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0, lineHeight: 1, letterSpacing: '-0.03em' }}>{(rec.demand_score ?? 0).toFixed(1)}</p>
@@ -499,7 +574,7 @@ export default function Dashboard() {
                           </div>
                         </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginBottom: '12px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginBottom: '10px' }}>
                           {[
                             { v: rec.views,     l: 'views' },
                             { v: rec.cart_adds, l: 'cart' },
@@ -517,6 +592,11 @@ export default function Dashboard() {
                           <StockBar current={rec.current_stock} initial={10} />
                           <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{rec.current_stock}/10 units</span>
                           <span style={{ marginLeft: 'auto', fontSize: '11px', color: 'var(--text-secondary)' }}>{(rec.conversion_pct ?? 0).toFixed(1)}% conv.</span>
+                          {rec.ai_revenue_impact && rec.ai_revenue_impact > 0 && (
+                            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--accent)' }}>
+                              ₹{(rec.ai_revenue_impact / 1000).toFixed(0)}K impact
+                            </span>
+                          )}
                         </div>
                       </div>
                     );

@@ -1,0 +1,25 @@
+.gcloudignore
+.git
+.gitignore
+
+# Node
+**/node_modules/
+**/.next/
+**/dist/
+**/.vite/
+
+# Python
+**/__pycache__/
+**/*.pyc
+**/.venv/
+**/venv/
+**/.env.local
+
+# dbt
+**/dbt/target/
+**/dbt/logs/
+
+# Misc
+**/*.xlsx
+pictures/
+*.pptx

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { fetchStorefront, fetchStock, fetchRecommendations, restockProduct, fetchPricingMargins, fetchRevenue, fetchInventoryAlerts } from '../api/client';
+import { fetchStorefront, fetchStock, fetchRecommendations, restockProduct, fetchPricingMargins, fetchRevenue, fetchInventoryAlerts, fetchAIBrief } from '../api/client';
 import type { StorefrontData, StockItem, Recommendation, PricingMargin, RevenueRow, InventoryAlert, RestockHistoryEntry } from '../types';
 
 // ── Restock adjustments persisted in localStorage ──────────────────────────
@@ -84,7 +84,7 @@ export const useStock = () =>
   });
 
 export const useRecommendations = (days: number) =>
-  useQuery<{ recommendations: Recommendation[] }>({
+  useQuery<{ recommendations: Recommendation[]; ai_powered?: boolean }>({
     queryKey: ['recommendations', days],
     queryFn: () => fetchRecommendations(days).then(data => ({
       ...data,
@@ -112,6 +112,15 @@ export const useInventoryAlerts = () =>
     queryKey: ['inventoryAlerts'],
     queryFn: fetchInventoryAlerts,
     refetchInterval: 60_000,
+  });
+
+export const useAIBrief = (enabled: boolean) =>
+  useQuery<{ recommendations: Record<string, unknown> }>({
+    queryKey: ['ai-brief'],
+    queryFn: fetchAIBrief,
+    enabled,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 
 // ── Restock mutation ──────────────────────────────────────────────────────────

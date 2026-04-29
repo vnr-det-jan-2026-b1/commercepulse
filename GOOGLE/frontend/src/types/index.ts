@@ -19,6 +19,11 @@ export interface Recommendation {
   purchases: number;
   conversion_pct: number;
   recommendation: string;
+  ai_insight?: string;
+  ai_urgency?: string;
+  ai_revenue_impact?: number;
+  revenue_at_risk?: number;
+  revenue_generated?: number;
 }
 
 export interface StorefrontOverview {

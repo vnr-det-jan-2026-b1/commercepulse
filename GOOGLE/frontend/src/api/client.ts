@@ -30,3 +30,6 @@ export const fetchRevenue = (days: number) =>
 
 export const fetchInventoryAlerts = () =>
   api.get('/v1/analytics/inventory/alerts', { params: { seller_id: sellerId } }).then(r => r.data);
+
+export const fetchAIBrief = () =>
+  api.post(`/v1/ai/recommendations`, null, { params: { seller_id: sellerId } }).then(r => r.data);

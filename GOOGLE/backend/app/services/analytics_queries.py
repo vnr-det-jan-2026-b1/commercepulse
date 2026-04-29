@@ -393,6 +393,8 @@ SELECT
     SAFE_DIVIDE(COALESCE(d.purchase_events, 0),
                 NULLIF(COALESCE(d.views, 0), 0)) * 100, 1
   )                                                                AS conversion_pct,
+  ROUND(s.price * s.current_stock, 0)                              AS revenue_at_risk,
+  ROUND(s.price * COALESCE(d.purchase_events, 0), 0)              AS revenue_generated,
   CASE
     WHEN s.current_stock <= 2
       AND (COALESCE(d.views,0)*0.2 + COALESCE(d.cart_adds,0)*0.5

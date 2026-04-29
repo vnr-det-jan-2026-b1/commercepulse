@@ -197,7 +197,34 @@ async def list_products(
 async def product_recommendations(
     seller_id: str = Query(...),
     days:      int = Query(7, ge=1, le=90),
+    ai:        bool = Query(True),
     _scope:    str = Depends(enforce_seller_scope),
 ):
+    import logging
+    logger = logging.getLogger(__name__)
     rows = await bq.query(q.RECOMMENDATIONS_SQL, {"seller_id": seller_id, "days": days})
-    return {"seller_id": seller_id, "period_days": days, "recommendations": rows}
+
+    ai_insights: dict = {}
+    if ai and rows:
+        try:
+            from app.services import gemini_service as gemini
+            ai_insights = await gemini.generate_product_insights(seller_id, rows)
+        except Exception as e:
+            logger.warning("Gemini insights skipped: %s", e)
+
+    enriched = []
+    for row in rows:
+        insight = ai_insights.get(row["product_id"], {})
+        enriched.append({
+            **row,
+            "ai_insight": insight.get("insight"),
+            "ai_urgency": insight.get("urgency"),
+            "ai_revenue_impact": insight.get("monthly_revenue_impact"),
+        })
+
+    return {
+        "seller_id": seller_id,
+        "period_days": days,
+        "ai_powered": bool(ai_insights),
+        "recommendations": enriched,
+    }

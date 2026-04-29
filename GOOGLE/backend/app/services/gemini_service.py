@@ -220,4 +220,61 @@ User question: {message}
             yield chunk.text
 
 
+async def generate_product_insights(seller_id: str, recs: list[dict]) -> dict:
+    """
+    Batch Gemini call: generates per-product natural language insights.
+    Returns dict keyed by product_id. Fails silently if Gemini unavailable.
+    """
+    if not recs:
+        return {}
+
+    products_summary = "\n".join(
+        f"- {r.get('product_id')} | {r.get('product_name')} | price:₹{r.get('price',0)} "
+        f"| stock:{r.get('current_stock',0)} | views:{r.get('views',0)} "
+        f"| cart:{r.get('cart_adds',0)} | sold:{r.get('purchases',0)} "
+        f"| demand_score:{r.get('demand_score',0)} | label:{r.get('recommendation','')}"
+        for r in recs
+    )
+
+    prompt = f"""You are an e-commerce analytics AI for Indian marketplace sellers (Flipkart, Amazon India, Meesho).
+
+Seller: {seller_id}
+Product data (last 7 days of real storefront activity):
+{products_summary}
+
+For EVERY product above, generate a specific data-driven recommendation. Cite exact numbers and ₹ values.
+
+Return ONLY a valid JSON array with exactly {len(recs)} entries, no other text:
+[
+  {{
+    "product_id": "P001",
+    "insight": "Restock 8 units now — selling 3 units/day at ₹2,999 and stock hits zero in 2 days, costing ₹72K in lost revenue this month.",
+    "urgency": "CRITICAL",
+    "monthly_revenue_impact": 72000
+  }}
+]
+
+Rules:
+- urgency: CRITICAL (stock=0 or demand high + low stock) | HIGH (restock soon) | MEDIUM (pricing action) | LOW (maintain or skip)
+- insight: 1 sentence, under 25 words, cite actual numbers from the data
+- monthly_revenue_impact: realistic INR estimate of monthly impact if action taken
+- Include all {len(recs)} products
+"""
+
+    try:
+        model = _get_model()
+        response = model.generate_content(
+            prompt,
+            generation_config=GenerationConfig(
+                temperature=0.2,
+                response_mime_type="application/json",
+            ),
+        )
+        insights_list = json.loads(response.text)
+        return {item["product_id"]: item for item in insights_list if "product_id" in item}
+    except Exception as e:
+        logger.warning("Gemini product insights failed: %s", e)
+        return {}
+
+
 import asyncio  # noqa: E402 — needed for gather in build_seller_context
