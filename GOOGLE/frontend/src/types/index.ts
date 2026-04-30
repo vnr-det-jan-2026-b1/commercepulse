@@ -12,6 +12,7 @@ export interface Recommendation {
   product_id: string;
   product_name: string;
   price: number;
+  initial_stock: number;
   current_stock: number;
   demand_score: number;
   views: number;
