@@ -383,18 +383,18 @@ SELECT
   s.current_stock,
   COALESCE(d.views, 0)                                             AS views,
   COALESCE(d.cart_adds, 0)                                         AS cart_adds,
-  COALESCE(d.purchase_events, 0)                                   AS purchases,
+  COALESCE(d.units_sold_period, 0)                                 AS purchases,
   ROUND(
     COALESCE(d.views, 0) * 0.2
     + COALESCE(d.cart_adds, 0) * 0.5
     + COALESCE(d.purchase_events, 0) * 1.0, 2
   )                                                                AS demand_score,
   ROUND(
-    SAFE_DIVIDE(COALESCE(d.purchase_events, 0),
+    SAFE_DIVIDE(COALESCE(d.units_sold_period, 0),
                 NULLIF(COALESCE(d.views, 0), 0)) * 100, 1
   )                                                                AS conversion_pct,
   ROUND(s.price * s.current_stock, 0)                              AS revenue_at_risk,
-  ROUND(s.price * COALESCE(d.purchase_events, 0), 0)              AS revenue_generated,
+  ROUND(s.price * COALESCE(d.units_sold_period, 0), 0)            AS revenue_generated,
   CASE
     WHEN s.current_stock <= 2
       AND (COALESCE(d.views,0)*0.2 + COALESCE(d.cart_adds,0)*0.5

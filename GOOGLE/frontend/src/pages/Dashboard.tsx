@@ -224,7 +224,7 @@ export default function Dashboard() {
 
         {/* Bottom */}
         <div style={{ padding: '14px 16px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Auto-refresh 30s</span>
+          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Live · 2s refresh</span>
           <ThemeToggle />
         </div>
       </aside>
@@ -589,8 +589,8 @@ export default function Dashboard() {
                         </div>
 
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <StockBar current={rec.current_stock} initial={10} />
-                          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{rec.current_stock}/10 units</span>
+                          <StockBar current={rec.current_stock} initial={rec.initial_stock ?? 10} />
+                          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{rec.current_stock}/{rec.initial_stock ?? 10} units</span>
                           <span style={{ marginLeft: 'auto', fontSize: '11px', color: 'var(--text-secondary)' }}>{(rec.conversion_pct ?? 0).toFixed(1)}% conv.</span>
                           {rec.ai_revenue_impact && rec.ai_revenue_impact > 0 && (
                             <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--accent)' }}>
@@ -745,7 +745,7 @@ export default function Dashboard() {
                         </tr>
                       </thead>
                       <tbody>
-                        {stock.slice().sort((a: StockItem, b: StockItem) => a.current_stock - b.current_stock).map((p: StockItem, i: number) => {
+                        {stock.slice().sort((a: StockItem, b: StockItem) => a.product_id.localeCompare(b.product_id)).map((p: StockItem, i: number) => {
                           const isCritical = p.current_stock <= 3;
                           const isOut = p.current_stock === 0;
                           const ordered = !!restockDone[p.product_id];
