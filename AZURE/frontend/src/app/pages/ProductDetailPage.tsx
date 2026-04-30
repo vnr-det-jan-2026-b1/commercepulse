@@ -54,9 +54,9 @@ const sentimentData = [
 ];
 
 const topReasons = [
-  { phrase: "Excellent quality", sentiment: "positive", count: 342 },
+  { phrase: "Excellent taste", sentiment: "positive", count: 342 },
   { phrase: "Fast shipping", sentiment: "positive", count: 298 },
-  { phrase: "Misleading size", sentiment: "negative", count: 87 },
+  { phrase: "Too acidic", sentiment: "negative", count: 87 },
 ];
 
 // Diagnostic event descriptions
@@ -122,19 +122,19 @@ export function ProductDetailPage() {
           <div className="flex items-start gap-6">
             <div className="w-32 h-32 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center overflow-hidden">
               <ImageWithFallback
-                src="https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=400&fit=crop"
-                alt="Wireless Headphones Pro"
+                src="https://images.unsplash.com/photo-1559525839-b184a4d698c7?w=400&h=400&fit=crop"
+                alt="Artisan Cold Brew Concentrate"
                 className="w-full h-full object-cover"
               />
             </div>
             <div>
               <h1 className="text-3xl font-semibold text-gray-900 mb-2">
-                Wireless Headphones Pro
+                Artisan Cold Brew Concentrate
               </h1>
               <div className="flex items-center gap-4 text-sm text-gray-600">
-                <span className="font-medium">SKU: WHP-2024-01</span>
+                <span className="font-medium">SKU: BB-CF-001</span>
                 <span className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full font-medium">
-                  Electronics
+                  Cold Brew
                 </span>
               </div>
             </div>
@@ -151,7 +151,7 @@ export function ProductDetailPage() {
                   <Edit2 className="w-3 h-3 text-slate-500" />
                 </button>
               </div>
-              <p className="text-2xl font-semibold text-slate-900">$49.99</p>
+              <p className="text-2xl font-semibold text-slate-900">₹850.00</p>
             </div>
 
             <div className="bg-gradient-to-br from-indigo-50 to-white border border-indigo-200 rounded-2xl p-5 min-w-[180px]">
@@ -171,8 +171,8 @@ export function ProductDetailPage() {
               <p className="text-xs font-medium text-emerald-600 uppercase tracking-wide mb-2">
                 Revenue Contrib.
               </p>
-              <p className="text-2xl font-semibold text-slate-900">$62,335</p>
-              <p className="text-xs text-slate-600 mt-1">12% of Total Store</p>
+              <p className="text-2xl font-semibold text-slate-900">₹62,335</p>
+              <p className="text-xs text-slate-600 mt-1">12% of Total Revenue</p>
             </div>
           </div>
         </div>
@@ -260,7 +260,7 @@ export function ProductDetailPage() {
                 <div className="flex-1">
                   <h3 className="font-semibold text-white mb-1">Price Optimization</h3>
                   <p className="text-sm text-indigo-100 leading-relaxed">
-                    Increase price by 5% ($2.50). High demand elasticity detected. AI
+                    Increase price by 5% (₹42.50). High demand elasticity detected. AI
                     predicts <span className="font-semibold text-emerald-300">+8% net profit</span>{" "}
                     without losing volume.
                   </p>
@@ -301,7 +301,7 @@ export function ProductDetailPage() {
                   <h3 className="font-semibold text-white mb-1">Bundle Opportunity</h3>
                   <p className="text-sm text-indigo-100 leading-relaxed">
                     Create a "Frequently Bought Together" bundle with{" "}
-                    <span className="font-semibold">USB-C Cable Pro</span>.{" "}
+                    <span className="font-semibold">Vanilla Syrup</span>.{" "}
                     <span className="font-semibold text-blue-300">88% affinity score</span> between
                     these items.
                   </p>

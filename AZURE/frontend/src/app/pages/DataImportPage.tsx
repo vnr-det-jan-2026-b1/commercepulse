@@ -1,16 +1,54 @@
-import { useState, useRef } from "react";
-import { Upload, FileSpreadsheet, AlertCircle, CheckCircle2, BarChart3, List } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Upload, FileSpreadsheet, AlertCircle, CheckCircle2, BarChart3, List, Database, LayoutDashboard } from "lucide-react";
 import * as xlsx from "xlsx";
+import { useNavigate } from "react-router";
+import { apiClient, ensureSeller } from "../services/api";
 
 export function DataImportPage() {
+  const [hasExistingData, setHasExistingData] = useState<boolean | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [parsedData, setParsedData] = useState<any[]>([]);
   const [columns, setColumns] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
   
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const timeoutId = setTimeout(() => {
+      if (isMounted && hasExistingData === null) {
+        console.warn("Database check timed out, allowing manual upload.");
+        setHasExistingData(false);
+      }
+    }, 10000); // 10s timeout
+
+    async function checkExistingData() {
+      try {
+        const sellerId = await ensureSeller();
+        // Add a small delay to avoid race conditions with backend startup
+        const data = await apiClient.get(`/analytics/dashboard?seller_id=${sellerId}&days=365`);
+        if (isMounted) {
+          if (data && data.kpis && data.kpis.total_orders > 0) {
+            setHasExistingData(true);
+          } else {
+            setHasExistingData(false);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to check existing data:", err);
+        if (isMounted) setHasExistingData(false);
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    }
+    checkExistingData();
+    return () => { isMounted = false; clearTimeout(timeoutId); };
+  }, []);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -95,6 +133,36 @@ export function DataImportPage() {
     setFile(null);
     setParsedData([]);
     setColumns([]);
+    setUploadSuccess(false);
+    setError(null);
+  };
+
+  const submitToDatabase = async () => {
+    if (!file) return;
+    
+    setIsUploading(true);
+    setError(null);
+    
+    try {
+      // Make sure we have a seller before uploading
+      const sellerId = await ensureSeller();
+
+      const formData = new FormData();
+      formData.append("seller_id", sellerId);
+      formData.append("file", file);
+      
+      // Send to the /full endpoint which processes multiple sheets
+      const response = await apiClient.postForm("/upload/full", formData);
+      
+      console.log("Upload successful:", response);
+      setUploadSuccess(true);
+      setHasExistingData(true); // Update state to show existing data view
+    } catch (err: any) {
+      console.error("Upload error:", err);
+      setError(err.message || "Failed to upload data to the backend database.");
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
@@ -106,17 +174,72 @@ export function DataImportPage() {
             Upload and analyze your custom datasets instantly.
           </p>
         </div>
-        {parsedData.length > 0 && (
-          <button 
-            onClick={resetUpload}
-            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-medium transition-colors"
-          >
-            Upload New File
-          </button>
+        {hasExistingData === false && parsedData.length > 0 && (
+          <div className="flex gap-3">
+            <button 
+              onClick={resetUpload}
+              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-medium transition-colors"
+            >
+              Upload New File
+            </button>
+            {!uploadSuccess && (
+              <button 
+                onClick={submitToDatabase}
+                disabled={isUploading}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 disabled:bg-purple-400 font-medium transition-colors shadow-sm"
+              >
+                <Database className="w-4 h-4" />
+                {isUploading ? "Uploading..." : "Save to Database"}
+              </button>
+            )}
+          </div>
         )}
       </div>
 
-      {!file && (
+      {hasExistingData === null && (
+        <div className="w-full max-w-xl mx-auto mt-20 text-center">
+          <div className="inline-block animate-spin w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full mb-4"></div>
+          <p className="text-gray-600 font-medium">Checking database status...</p>
+        </div>
+      )}
+
+      {hasExistingData === true && (
+        <div className="w-full max-w-3xl mx-auto mt-12 bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="p-12 text-center">
+            <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
+              {uploadSuccess ? <CheckCircle2 className="w-10 h-10" /> : <Database className="w-10 h-10" />}
+            </div>
+            <h3 className="text-2xl font-semibold text-gray-900 mb-3">
+              {uploadSuccess ? "Upload Successful!" : "Active Dataset Running"}
+            </h3>
+            <p className="text-gray-500 mb-10 max-w-md mx-auto text-lg">
+              {uploadSuccess 
+                ? "Your data has been successfully imported to the CommercePulse database. The AI is now analyzing your records."
+                : "Your CommercePulse database is populated and ready. The dashboard and AI insights are actively analyzing your data."}
+            </p>
+            <div className="flex gap-4 justify-center">
+              <button 
+                onClick={() => navigate("/")}
+                className="px-8 py-3 bg-purple-600 text-white rounded-xl hover:bg-purple-700 font-medium transition-colors shadow-sm flex items-center gap-2"
+              >
+                <LayoutDashboard className="w-5 h-5" />
+                Go to Dashboard
+              </button>
+              <button 
+                onClick={() => {
+                  setHasExistingData(false);
+                  resetUpload();
+                }}
+                className="px-8 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 font-medium transition-colors"
+              >
+                Upload New Dataset
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {hasExistingData === false && !file && (
         <div 
           className={`w-full max-w-3xl mx-auto mt-12 bg-white rounded-2xl border-2 border-dashed transition-all duration-200 ${
             dragActive ? "border-purple-500 bg-purple-50" : "border-gray-300 hover:border-purple-400"
@@ -158,14 +281,25 @@ export function DataImportPage() {
         </div>
       )}
 
-      {isProcessing && (
+      {hasExistingData === false && isProcessing && (
         <div className="w-full max-w-xl mx-auto mt-20 text-center">
           <div className="inline-block animate-spin w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full mb-4"></div>
           <p className="text-gray-600 font-medium">Analyzing document and extracting insights...</p>
         </div>
       )}
 
-      {file && !isProcessing && parsedData.length > 0 && (
+      {hasExistingData === false && isUploading && (
+        <div className="w-full max-w-xl mx-auto mt-20 text-center animate-in fade-in duration-500">
+          <div className="inline-block animate-spin w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full mb-6"></div>
+          <h3 className="text-2xl font-semibold text-gray-900 mb-2">Uploading to Database...</h3>
+          <p className="text-gray-600 font-medium text-lg">
+            Please wait while we securely store and index your records. 
+            <br/><span className="text-sm text-gray-400 mt-2 block">This may take a minute for large datasets.</span>
+          </p>
+        </div>
+      )}
+
+      {hasExistingData === false && file && !isProcessing && !isUploading && parsedData.length > 0 && (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
           
           {/* Analysis Summary */}
@@ -205,6 +339,13 @@ export function DataImportPage() {
                </div>
              </div>
           </div>
+
+          {error && (
+            <div className="mb-6 flex items-center gap-2 text-red-600 bg-red-50 px-4 py-4 rounded-xl border border-red-100 font-medium">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              {error}
+            </div>
+          )}
 
           {/* Data Preview Table */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">

@@ -15,6 +15,10 @@ app = FastAPI(
     description="REST API for triggering the multi-agent LangGraph workflows."
 )
 
+@app.get("/")
+async def health_check():
+    return {"status": "online", "service": "AI Agents", "engine": "LangGraph"}
+
 class SimulationRequest(BaseModel):
     seller_id: str
     time_window_start: str
@@ -34,10 +38,13 @@ async def run_simulation(request: SimulationRequest):
         "time_window_start": request.time_window_start,
         "time_window_end": request.time_window_end,
         "snapshot_data": request.snapshot_data,
+        "product_id": None,
         "revenue_insights": None,
         "ops_insights": None,
         "market_insights": None,
-        "final_executive_plan": None
+        "marketing_insights": None,
+        "final_executive_plan": None,
+        "product_analysis": None
     }
     
     try:
@@ -72,10 +79,13 @@ async def run_simulation_stream(request: SimulationRequest):
         "time_window_start": request.time_window_start,
         "time_window_end": request.time_window_end,
         "snapshot_data": request.snapshot_data,
+        "product_id": None,
         "revenue_insights": None,
         "ops_insights": None,
         "market_insights": None,
-        "final_executive_plan": None
+        "marketing_insights": None,
+        "final_executive_plan": None,
+        "product_analysis": None
     }
     
     async def generate():
@@ -143,6 +153,54 @@ async def run_whatif_stream(request: WhatIfRequest):
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
             
     return StreamingResponse(generate(), media_type="text/event-stream")
+
+from app.agents.product_graph import build_product_analysis_engine
+product_engine = build_product_analysis_engine()
+
+class ProductAnalysisRequest(BaseModel):
+    seller_id: str
+    product_id: str
+    product_data: Dict[str, Any]
+
+@app.post("/api/v1/analyze/product")
+async def analyze_product(request: ProductAnalysisRequest):
+    """
+    Executes the Per-Product LangGraph scenario.
+    """
+    if not os.getenv("GROQ_API_KEY"):
+        raise HTTPException(status_code=500, detail="GROQ_API_KEY is not set.")
+        
+    initial_state: SystemState = {
+        "seller_id": request.seller_id,
+        "product_id": request.product_id,
+        "time_window_start": "",
+        "time_window_end": "",
+        "snapshot_data": request.product_data,
+        "revenue_insights": None,
+        "ops_insights": None,
+        "market_insights": None,
+        "marketing_insights": None,
+        "final_executive_plan": None,
+        "product_analysis": None
+    }
+    
+    try:
+        final_state = product_engine.invoke(initial_state)
+        
+        # Extract the ProductAnalysisResult object
+        analysis = final_state.get("product_analysis")
+        if analysis:
+            return {
+                "status": "success", 
+                "product_id": request.product_id,
+                "result": analysis.model_dump()
+            }
+        else:
+            return {"status": "partial", "message": "Graph completed but no product analysis was generated."}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

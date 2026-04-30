@@ -10,16 +10,18 @@ import {
   CheckCircle,
   XCircle,
 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { apiClient, ensureSeller } from "../services/api";
 
 const orders = [
-  { id: "ORD-2024-0847", customer: "John Smith", email: "john.smith@email.com", items: 3, amount: "$284.50", status: "Delivered", date: "Apr 1, 2026", payment: "Paid" },
-  { id: "ORD-2024-0846", customer: "Sarah Johnson", email: "sarah.j@email.com", items: 1, amount: "$129.99", status: "Shipped", date: "Apr 1, 2026", payment: "Paid" },
-  { id: "ORD-2024-0845", customer: "Michael Chen", email: "m.chen@email.com", items: 5, amount: "$542.30", status: "Processing", date: "Mar 31, 2026", payment: "Paid" },
-  { id: "ORD-2024-0844", customer: "Emily Davis", email: "emily.davis@email.com", items: 2, amount: "$198.75", status: "Pending", date: "Mar 31, 2026", payment: "Pending" },
-  { id: "ORD-2024-0843", customer: "David Wilson", email: "d.wilson@email.com", items: 4, amount: "$367.20", status: "Delivered", date: "Mar 30, 2026", payment: "Paid" },
-  { id: "ORD-2024-0842", customer: "Lisa Anderson", email: "lisa.a@email.com", items: 1, amount: "$89.50", status: "Cancelled", date: "Mar 30, 2026", payment: "Refunded" },
-  { id: "ORD-2024-0841", customer: "James Taylor", email: "james.t@email.com", items: 6, amount: "$654.80", status: "Shipped", date: "Mar 29, 2026", payment: "Paid" },
-  { id: "ORD-2024-0840", customer: "Maria Garcia", email: "maria.g@email.com", items: 2, amount: "$245.00", status: "Processing", date: "Mar 29, 2026", payment: "Paid" },
+  { id: "ORD-2026-0847", customer: "Rahul Sharma", email: "rahul.s@email.com", items: 3, amount: "₹1,450", status: "Delivered", date: "Apr 1, 2026", payment: "Paid" },
+  { id: "ORD-2026-0846", customer: "Priya Patel", email: "priya.p@email.com", items: 1, amount: "₹850", status: "Shipped", date: "Apr 1, 2026", payment: "Paid" },
+  { id: "ORD-2026-0845", customer: "Arjun Reddy", email: "arjun.r@email.com", items: 5, amount: "₹3,420", status: "Processing", date: "Mar 31, 2026", payment: "Paid" },
+  { id: "ORD-2026-0844", customer: "Neha Gupta", email: "neha.g@email.com", items: 2, amount: "₹1,200", status: "Pending", date: "Mar 31, 2026", payment: "Pending" },
+  { id: "ORD-2026-0843", customer: "Vikram Singh", email: "vikram.s@email.com", items: 4, amount: "₹2,670", status: "Delivered", date: "Mar 30, 2026", payment: "Paid" },
+  { id: "ORD-2026-0842", customer: "Anjali Desai", email: "anjali.d@email.com", items: 1, amount: "₹450", status: "Cancelled", date: "Mar 30, 2026", payment: "Refunded" },
+  { id: "ORD-2026-0841", customer: "Rohan Verma", email: "rohan.v@email.com", items: 6, amount: "₹4,150", status: "Shipped", date: "Mar 29, 2026", payment: "Paid" },
+  { id: "ORD-2026-0840", customer: "Sneha Iyer", email: "sneha.i@email.com", items: 2, amount: "₹1,350", status: "Processing", date: "Mar 29, 2026", payment: "Paid" },
 ];
 
 const statusConfig = {
@@ -38,11 +40,59 @@ const orderStats = [
 ];
 
 export function OrdersPage() {
+  const [data, setData] = useState<any[]>(orders);
+  const [stats, setStats] = useState(orderStats);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const sellerId = await ensureSeller();
+        
+        // Fetch list and stats in parallel
+        const [listRes, statsRes] = await Promise.all([
+          apiClient.get(`/analytics/orders/list?seller_id=${sellerId}&limit=50`),
+          apiClient.get(`/analytics/orders/stats?seller_id=${sellerId}&days=365`)
+        ]);
+
+        if (listRes.data && listRes.data.length > 0) {
+          setData(listRes.data.map((item: any) => ({
+            id: item.order_id,
+            customer: item.customer_name,
+            email: item.customer_email ? item.customer_email.replace(/(.{2}).+(@.+)/, '$1***$2') : 'No email',
+            date: new Date(item.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }),
+            status: item.status === 'delivered' ? 'Delivered' : item.status === 'cancelled' ? 'Cancelled' : item.status === 'processing' ? 'Processing' : item.status === 'shipped' ? 'Shipped' : 'Pending',
+            amount: `₹${item.amount.toLocaleString()}`,
+            items: item.items,
+            payment: item.payment === 'cod' ? 'Pending' : 'Paid',
+          })));
+        }
+
+        if (statsRes.stats && statsRes.stats.total_orders !== undefined) {
+          const s = statsRes.stats;
+          setStats([
+            { label: "Total Orders", value: s.total_orders.toLocaleString(), change: "All time", color: "purple" },
+            { label: "Pending Orders", value: s.pending_orders.toLocaleString(), change: "Awaiting fulfillment", color: "amber" },
+            { label: "Completed Orders", value: s.delivered_orders.toLocaleString(), change: "Successfully delivered", color: "green" },
+            { label: "Cancelled Orders", value: s.cancelled_orders.toLocaleString(), change: "Cancelled orders", color: "red" },
+          ]);
+        }
+      } catch (error) {
+        console.error("Error fetching orders data, using mock data", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, []);
+
   return (
     <>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Orders</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">
+            Orders {loading && <span className="text-sm font-normal text-gray-500">(Loading live data...)</span>}
+          </h1>
           <p className="text-sm text-gray-600 mt-1">
             Manage and track all your orders
           </p>
@@ -55,7 +105,7 @@ export function OrdersPage() {
 
       {/* Order Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {orderStats.map((stat, index) => {
+        {stats.map((stat, index) => {
           const bgColor = stat.color === "purple" ? "bg-purple-50" : stat.color === "amber" ? "bg-amber-50" : stat.color === "green" ? "bg-green-50" : "bg-red-50";
           const iconColor = stat.color === "purple" ? "text-purple-600" : stat.color === "amber" ? "text-amber-600" : stat.color === "green" ? "text-green-600" : "text-red-600";
           
@@ -106,7 +156,7 @@ export function OrdersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {orders.map((order) => {
+              {data.map((order) => {
                 const statusInfo = statusConfig[order.status as keyof typeof statusConfig];
                 const StatusIcon = statusInfo.icon;
 
@@ -157,7 +207,7 @@ export function OrdersPage() {
         </div>
 
         <div className="p-6 border-t border-gray-200 flex items-center justify-between">
-          <p className="text-sm text-gray-600">Showing 8 of 1,680 orders</p>
+          <p className="text-sm text-gray-600">Showing {data.length} orders</p>
           <div className="flex items-center gap-2">
             <button className="px-4 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50 transition-colors">
               Previous

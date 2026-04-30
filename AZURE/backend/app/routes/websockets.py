@@ -60,10 +60,7 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# Start the Redis listener thread in the background
-@router.on_event("startup")
-async def startup_event():
-    asyncio.create_task(manager.listen_to_redis())
+
 
 @router.websocket("/ws/{seller_id}")
 async def websocket_endpoint(websocket: WebSocket, seller_id: str):

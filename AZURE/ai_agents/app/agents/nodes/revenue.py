@@ -1,48 +1,105 @@
+"""
+Revenue Intelligence Agent — CFO Persona.
+Analyzes pricing, margins, discount effectiveness, and stockout revenue impact
+using REAL data from the Orchestrator-enriched snapshot.
+"""
 import os
+import json
 from langchain_groq import ChatGroq
 from app.agents.state import SystemState
 from app.agents.schemas import RevenueInsights
 
+
 def run_revenue_agent(state: SystemState) -> dict:
     """
-    CFO Persona.
-    Examines the snapshot data for revenue drops and simulates discount safety.
+    CFO Persona — Pricing & Margin Strategist.
+    Examines real pricing margins, marketplace commissions, discount patterns,
+    and stockout impact to find revenue leaks and growth opportunities.
     """
     from app.db.supabase_client import fetch_recent_context
-    print("📈 [Revenue Agent] Fetching recent context from Supabase/pgvector...")
-    
-    seller_id = state.get("seller_id")
-    recent_context = fetch_recent_context(seller_id, limit=5)
-    
-    llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0.0)
-    
-    # We force the LLM to output exactly our Pydantic schema
-    structured_llm = llm.with_structured_output(RevenueInsights)
-    
-    snapshot = state.get("snapshot_data", {})
-    
-    prompt = f"""
-    You are the Chief Financial Officer (CFO) and Head of Pricing Strategy for a massive eCommerce portfolio.
-    You deal strictly in numbers, margin thresholds, price elasticity, and direct revenue impact. You care about protecting net profit at all costs.
-    
-    Here is the recent product context from our PostgreSQL vector database for Seller {seller_id}:
-    {recent_context}
+    print("📈 [Revenue Agent] Analyzing pricing, margins, and revenue leaks...")
 
-    Analyze the following recent triggered event/snapshot for Seller {seller_id}:
-    {snapshot}
-    
-    DIRECTIONS:
-    1. Calculate and identify precisely where revenue is leaking (e.g., conversion drops caused directly by competitor pricing, stockout velocity).
-    2. Assess the absolute gross margin hit of the current scenario.
-    3. Before authorizing any price discounts, rigorously evaluate if `is_profit_safe` is true. Never suggest a discount that falls below the baseline COGS/margin requirement unless it's a strategic loss-leader.
-    4. Provide immediate, exact financial counter-measures (e.g., 'Deploy a 4% targeted coupon instead of a flat 8% price drop to preserve margins').
-    """
-    
+    seller_id = state.get("seller_id")
+    snapshot = state.get("snapshot_data", {})
+
+    # Extract the real data sections injected by the Orchestrator
+    # Handle both Global analysis schema and Per-Product analysis schema
+    if "profit_and_loss" in snapshot:
+        # We are in Product Analysis mode
+        dashboard_kpis = json.dumps(snapshot.get("profit_and_loss", {}), indent=2, default=str)
+        pricing_margins = json.dumps(snapshot.get("pricing_by_marketplace", []), indent=2, default=str)
+        revenue_by_mp = json.dumps(snapshot.get("revenue_by_marketplace", []), indent=2, default=str)
+        inventory_alerts = json.dumps(snapshot.get("inventory_health", {}), indent=2, default=str)
+    else:
+        # We are in Global Analysis mode
+        dashboard_kpis = json.dumps(snapshot.get("dashboard_kpis", {}), indent=2, default=str)
+        pricing_margins = json.dumps(snapshot.get("pricing_margins", [])[:15], indent=2, default=str)
+        revenue_by_mp = json.dumps(snapshot.get("revenue_by_marketplace", []), indent=2, default=str)
+        inventory_alerts = json.dumps(snapshot.get("inventory_alerts", [])[:10], indent=2, default=str)
+
+    # Also fetch vector context for historical trends
     try:
-        # Generate the structured insight
-        result: RevenueInsights = structured_llm.invoke(prompt)
-        return {"revenue_insights": result}
+        recent_context = fetch_recent_context(seller_id, limit=3)
     except Exception as e:
-        print(f"Error in Revenue Agent: {e}")
-        # Return empty state if failure
-        return {"revenue_insights": None}
+        print(f"  ⚠️ Could not fetch Supabase context: {e}")
+        recent_context = "No historical context available (Supabase unavailable)."
+
+    from app.utils import get_groq_api_key
+    llm = ChatGroq(api_key=get_groq_api_key(), model="llama-3.1-8b-instant", temperature=0.0)
+    structured_llm = llm.with_structured_output(RevenueInsights)
+
+    prompt = f"""
+You are the Chief Financial Officer (CFO) of a D2C (Direct-to-Consumer) brand selling specialty coffee products across Indian marketplaces (Amazon India, Flipkart, and their own Shopify store).
+
+Your job is to analyze the REAL financial data below and identify exactly where this brand is losing money and where they can grow revenue. Be ruthlessly specific — reference actual product names, SKUs, prices, and margins from the data.
+
+=== OVERALL BUSINESS KPIs (Last {snapshot.get('period_days', 30)} days) ===
+{dashboard_kpis}
+
+=== REVENUE BY MARKETPLACE ===
+{revenue_by_mp}
+
+=== PRODUCT PRICING & MARGINS (Current Snapshot) ===
+Each row shows: SKU, product name, marketplace, selling_price, cost_price, MRP, commission_pct, discount_percentage, net_margin, margin_pct
+{pricing_margins}
+
+=== STOCKOUT & LOW-STOCK ALERTS ===
+Products currently out of stock or below reorder threshold (these represent LOST SALES):
+{inventory_alerts}
+
+=== HISTORICAL CONTEXT (from vector DB) ===
+{recent_context}
+
+YOUR ANALYSIS MUST:
+
+1. **Identify Margin Killers**: Which specific products have margin_pct below 15%? Why? Is it commission, discount, or cost price? For each, calculate the exact margin gap.
+
+2. **Quantify Stockout Revenue Loss**: For each out-of-stock product, estimate the daily revenue being lost based on its historical selling_price and order volume. Stockouts are the #1 silent killer of D2C brands.
+
+3. **Detect Discount Abuse**: Are any products being discounted unnecessarily (i.e., products that would sell at full price)? Calculate how much margin is being wasted on pointless discounts.
+
+4. **Marketplace Commission Analysis**: Compare the effective commission rates across Amazon, Flipkart, and Shopify. Identify products where switching the primary sales channel would significantly boost margin.
+
+5. **Pricing Action Plan**: For each underperforming product, provide a SPECIFIC pricing recommendation with exact numbers (e.g., "Increase BB-CF-005 selling price from ₹349 to ₹399 on Amazon — margin improves from 8.2% to 16.5%").
+
+Be brutally honest. Use actual numbers from the data. Do NOT give generic advice.
+
+IMPORTANT: Every action in recommended_actions MUST include ALL required fields: action_name, reason, strategy, description, estimated_impact_percentage, financial_impact_monthly, is_profit_safe, risk_level, difficulty, timeframe. Do NOT omit any field.
+"""
+
+    from app.utils import get_groq_api_key
+    llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0.0)
+
+    max_retries = 3
+    for attempt in range(max_retries + 1):
+        try:
+            key = get_groq_api_key()
+            result: RevenueInsights = llm.with_config({"api_key": key}).with_structured_output(RevenueInsights).invoke(prompt)
+            return {"revenue_insights": result}
+        except Exception as e:
+            error_str = str(e)
+            if attempt < max_retries and ("tool_use_failed" in error_str or "missing properties" in error_str):
+                print(f"  ⚠️ [Revenue Agent] Retry {attempt + 1}/{max_retries} due to schema error...")
+                continue
+            print(f"  ❌ [Revenue Agent] Failed after {attempt + 1} attempts: {e}")
+            return {"revenue_insights": None}

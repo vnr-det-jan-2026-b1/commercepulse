@@ -20,6 +20,18 @@ export default defineConfig({
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
   server: {
-    port: 4000
+    port: 4000,
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8010',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+      '/ai-api': {
+        target: 'http://127.0.0.1:8001',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/ai-api/, ''),
+      }
+    }
   }
 })

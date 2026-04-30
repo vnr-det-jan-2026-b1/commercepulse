@@ -20,31 +20,39 @@ class SellerCreate(BaseModel):
 
 @router.post("/", summary="Register a new seller")
 async def create_seller(payload: SellerCreate, db: AsyncSession = Depends(get_db)):
-    seller = Seller(
-        seller_name = payload.seller_name,
-        marketplace = payload.marketplace,
-        region      = payload.region,
-        email       = payload.email,
-    )
-    db.add(seller)
-    await db.commit()
-    await db.refresh(seller)
-    return {
-        "seller_id":   str(seller.seller_id),
-        "seller_name": seller.seller_name,
-        "marketplace": seller.marketplace,
-        "created_at":  str(seller.created_at),
-    }
+    try:
+        seller = Seller(
+            seller_name = payload.seller_name,
+            marketplace = payload.marketplace,
+            region      = payload.region,
+            email       = payload.email,
+        )
+        db.add(seller)
+        await db.commit()
+        await db.refresh(seller)
+        return {
+            "seller_id":   str(seller.seller_id),
+            "seller_name": seller.seller_name,
+            "marketplace": seller.marketplace,
+            "created_at":  str(seller.created_at),
+        }
+    except Exception as e:
+        import traceback
+        raise HTTPException(status_code=400, detail=str(traceback.format_exc()))
 
 
 @router.get("/", summary="List all sellers")
 async def list_sellers(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Seller).where(Seller.is_active == True))
-    sellers = result.scalars().all()
-    return [
-        {"seller_id": str(s.seller_id), "seller_name": s.seller_name, "marketplace": s.marketplace}
-        for s in sellers
-    ]
+    try:
+        result = await db.execute(select(Seller).where(Seller.is_active == True))
+        sellers = result.scalars().all()
+        return [
+            {"seller_id": str(s.seller_id), "seller_name": s.seller_name, "marketplace": s.marketplace}
+            for s in sellers
+        ]
+    except Exception as e:
+        import traceback
+        raise HTTPException(status_code=400, detail=str(traceback.format_exc()))
 
 
 @router.get("/{seller_id}", summary="Get seller by ID")

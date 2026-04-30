@@ -28,10 +28,10 @@ class Seller(Base):
     __tablename__ = "sellers"
 
     seller_id   = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    seller_name = Column(Text, nullable=False)
+    seller_name = Column(Text, nullable=False, index=True)
     marketplace = Column(Text, nullable=False, default="multi")
     region      = Column(Text, nullable=False, default="IN")
-    email       = Column(Text, unique=True)
+    email       = Column(Text, unique=True, index=True)
     is_active   = Column(Boolean, nullable=False, default=True)
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -44,10 +44,10 @@ class Product(Base):
     __table_args__ = (UniqueConstraint("seller_id", "sku", "marketplace"),)
 
     product_id   = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    seller_id    = Column(UUID(as_uuid=True), ForeignKey("sellers.seller_id", ondelete="CASCADE"), nullable=False)
-    sku          = Column(Text, nullable=False)
-    product_name = Column(Text, nullable=False)
-    category     = Column(Text)
+    seller_id    = Column(UUID(as_uuid=True), ForeignKey("sellers.seller_id", ondelete="CASCADE"), nullable=False, index=True)
+    sku          = Column(Text, nullable=False, index=True)
+    product_name = Column(Text, nullable=False, index=True)
+    category     = Column(Text, index=True)
     sub_category = Column(Text)
     brand        = Column(Text)
     marketplace  = Column(Text)
@@ -62,22 +62,21 @@ class Order(Base):
     __tablename__ = "orders"
 
     order_id            = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    external_order_id   = Column(Text)
-    seller_id           = Column(UUID(as_uuid=True), ForeignKey("sellers.seller_id", ondelete="CASCADE"), nullable=False)
-    product_id          = Column(UUID(as_uuid=True), ForeignKey("products.product_id", ondelete="SET NULL"))
-    marketplace         = Column(Text, nullable=False)
-    order_status        = Column(Text, nullable=False)
+    external_order_id   = Column(Text, index=True)
+    seller_id           = Column(UUID(as_uuid=True), ForeignKey("sellers.seller_id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id          = Column(UUID(as_uuid=True), ForeignKey("products.product_id", ondelete="SET NULL"), index=True)
+    marketplace         = Column(Text, nullable=False, index=True)
+    order_status        = Column(Text, nullable=False, index=True)
     quantity            = Column(Integer, nullable=False, default=1)
     selling_price       = Column(Numeric(12, 2), nullable=False)
-    cost_price          = Column(Numeric(12, 2))
     discount            = Column(Numeric(12, 2), default=0)
     tax                 = Column(Numeric(12, 2), default=0)
-    shipping_fee        = Column(Numeric(12, 2), default=0)
-    order_date          = Column(Date, nullable=False)
+    shipping_fee        = Column(Numeric(12, 2), nullable=True, default=0)
+    order_date          = Column(Date, nullable=False, index=True)
     delivery_date       = Column(Date)
-    return_flag         = Column(Boolean, default=False)
+    return_flag         = Column(Boolean, default=False, index=True)
     cancellation_reason = Column(Text)
-    snapshot_date       = Column(Date, nullable=False, default=date.today)
+    snapshot_date       = Column(Date, nullable=False, default=date.today, index=True)
     created_at          = Column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -87,15 +86,15 @@ class InventorySnapshot(Base):
     __table_args__ = (UniqueConstraint("seller_id", "product_id", "marketplace", "snapshot_date"),)
 
     id                = Column(BigInteger, primary_key=True, autoincrement=True)
-    seller_id         = Column(UUID(as_uuid=True), ForeignKey("sellers.seller_id", ondelete="CASCADE"), nullable=False)
-    product_id        = Column(UUID(as_uuid=True), ForeignKey("products.product_id", ondelete="CASCADE"), nullable=False)
-    marketplace       = Column(Text, nullable=False)
+    seller_id         = Column(UUID(as_uuid=True), ForeignKey("sellers.seller_id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id        = Column(UUID(as_uuid=True), ForeignKey("products.product_id", ondelete="CASCADE"), nullable=False, index=True)
+    marketplace       = Column(Text, nullable=False, index=True)
     available_stock   = Column(Integer, nullable=False, default=0)
     reserved_stock    = Column(Integer, nullable=False, default=0)
     reorder_threshold = Column(Integer, default=10)
     days_of_stock     = Column(Numeric(6, 1))
     warehouse_location= Column(Text)
-    snapshot_date     = Column(Date, nullable=False, default=date.today)
+    snapshot_date     = Column(Date, nullable=False, default=date.today, index=True)
     created_at        = Column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -105,18 +104,16 @@ class PricingSnapshot(Base):
     __table_args__ = (UniqueConstraint("seller_id", "product_id", "marketplace", "snapshot_date"),)
 
     id                  = Column(BigInteger, primary_key=True, autoincrement=True)
-    seller_id           = Column(UUID(as_uuid=True), ForeignKey("sellers.seller_id", ondelete="CASCADE"), nullable=False)
-    product_id          = Column(UUID(as_uuid=True), ForeignKey("products.product_id", ondelete="CASCADE"), nullable=False)
-    marketplace         = Column(Text, nullable=False)
+    seller_id           = Column(UUID(as_uuid=True), ForeignKey("sellers.seller_id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id          = Column(UUID(as_uuid=True), ForeignKey("products.product_id", ondelete="CASCADE"), nullable=False, index=True)
+    marketplace         = Column(Text, nullable=False, index=True)
     selling_price       = Column(Numeric(12, 2), nullable=False)
     cost_price          = Column(Numeric(12, 2))
     mrp                 = Column(Numeric(12, 2))
     commission_pct      = Column(Numeric(5, 2), default=0)
     commission_amount   = Column(Numeric(12, 2), default=0)
     discount_percentage = Column(Numeric(5, 2), default=0)
-    net_margin          = Column(Numeric(12, 2))
-    margin_pct          = Column(Numeric(5, 2))
-    snapshot_date       = Column(Date, nullable=False, default=date.today)
+    snapshot_date       = Column(Date, nullable=False, default=date.today, index=True)
     created_at          = Column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -126,13 +123,14 @@ class TrafficMetric(Base):
     __table_args__ = (UniqueConstraint("seller_id", "product_id", "marketplace", "metric_date"),)
 
     id               = Column(BigInteger, primary_key=True, autoincrement=True)
-    seller_id        = Column(UUID(as_uuid=True), ForeignKey("sellers.seller_id", ondelete="CASCADE"), nullable=False)
-    product_id       = Column(UUID(as_uuid=True), ForeignKey("products.product_id", ondelete="CASCADE"), nullable=False)
-    marketplace      = Column(Text, nullable=False)
-    metric_date      = Column(Date, nullable=False, default=date.today)
+    seller_id        = Column(UUID(as_uuid=True), ForeignKey("sellers.seller_id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id       = Column(UUID(as_uuid=True), ForeignKey("products.product_id", ondelete="CASCADE"), nullable=False, index=True)
+    marketplace      = Column(Text, nullable=False, index=True)
+    metric_date      = Column(Date, nullable=False, default=date.today, index=True)
     impressions      = Column(Integer, default=0)
     clicks           = Column(Integer, default=0)
-    add_to_cart      = Column(Integer, default=0)
+    sessions         = Column(Integer, default=0)
+    page_views       = Column(Integer, default=0)
     orders           = Column(Integer, default=0)
     ad_spend         = Column(Numeric(12, 2), default=0)
     revenue_from_ads = Column(Numeric(12, 2), default=0)
@@ -154,7 +152,6 @@ class LogisticsMetric(Base):
     dispatch_date      = Column(Date)
     expected_delivery  = Column(Date)
     actual_delivery    = Column(Date)
-    shipping_time_days = Column(Integer)
     delivery_status    = Column(Text, nullable=False)
     rto_flag           = Column(Boolean, default=False)
     rto_reason         = Column(Text)
@@ -190,3 +187,27 @@ class InsightEmbedding(Base):
     embedding    = Column(Vector(384), nullable=False)
     meta         = Column("metadata", JSON, default=dict)
     created_at   = Column(DateTime(timezone=True), server_default=func.now())
+
+
+# ── AIProductAnalysis ──────────────────────────────────────────
+class AIProductAnalysis(Base):
+    __tablename__  = "ai_product_analyses"
+    __table_args__ = (UniqueConstraint("seller_id", "product_id", "analysis_date"),)
+
+    id                 = Column(BigInteger, primary_key=True, autoincrement=True)
+    seller_id          = Column(UUID(as_uuid=True), ForeignKey("sellers.seller_id", ondelete="CASCADE"), nullable=False)
+    product_id         = Column(UUID(as_uuid=True), ForeignKey("products.product_id", ondelete="CASCADE"), nullable=False)
+    analysis_date      = Column(Date, nullable=False, default=date.today)
+    
+    product_metrics    = Column(JSON, nullable=False, default=dict)
+    revenue_insights   = Column(JSON)
+    ops_insights       = Column(JSON)
+    marketing_insights = Column(JSON)
+    market_insights    = Column(JSON)
+    executive_summary  = Column(JSON)
+    
+    status             = Column(Text, nullable=False, default="pending")
+    error_message      = Column(Text)
+    
+    created_at         = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at         = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

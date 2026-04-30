@@ -26,6 +26,9 @@ class Settings(BaseSettings):
 
     # AI Agents API (runs by default on 8001 locally to avoid clash)
     AI_AGENTS_URL: str = "http://localhost:8001"
+    
+    # Groq API Key
+    GROQ_API_KEY: str = "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"
 
     @property
     def _pw(self) -> str:

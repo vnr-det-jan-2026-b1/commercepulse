@@ -11,18 +11,18 @@ export function Header() {
 
   // Mock search results
   const searchResults = searchQuery.length > 0 ? [
-    { type: "Product", name: "Wireless Headphones Pro", path: "/products/1" },
+    { type: "Product", name: "Artisan Cold Brew Concentrate", path: "/products/1" },
     { type: "Page", name: "Analytics Dashboard", path: "/analytics" },
     { type: "Page", name: "Inventory Management", path: "/inventory" },
-    { type: "Customer", name: "John Doe", path: "/customers" },
+    { type: "Customer", name: "Rahul Sharma", path: "/customers" },
   ].filter(item => 
     item.name.toLowerCase().includes(searchQuery.toLowerCase())
   ) : [];
 
   const notifications = [
-    { id: 1, title: "Low Stock Alert", message: "Wireless Headphones Pro - 12 units left", time: "5m ago", unread: true },
-    { id: 2, title: "Order Fulfilled", message: "Order #12847 shipped successfully", time: "1h ago", unread: true },
-    { id: 3, title: "New Review", message: "5-star review on Smart Watch Series 5", time: "3h ago", unread: false },
+    { id: 1, title: "Low Stock Alert", message: "Single-Origin Espresso Roast - 12 units left", time: "5m ago", unread: true },
+    { id: 2, title: "Order Fulfilled", message: "Order #12847 shipped via BlueDart", time: "1h ago", unread: true },
+    { id: 3, title: "New Review", message: "5-star review on French Press Blend", time: "3h ago", unread: false },
   ];
 
   return (
@@ -31,10 +31,10 @@ export function Header() {
         {/* Welcome Message */}
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">
-            Welcome back, Sarah
+            Welcome back, Founder
           </h1>
           <p className="text-sm text-gray-600 mt-1">
-            Here's what's happening with your store today
+            Here's what's happening with Brew Boulevard today
           </p>
         </div>
 
@@ -147,11 +147,11 @@ export function Header() {
               className="flex items-center gap-3 pl-4 border-l border-gray-200 hover:opacity-80 transition-opacity"
             >
               <div className="text-right">
-                <p className="text-sm font-medium text-gray-900">Sarah Johnson</p>
-                <p className="text-xs text-gray-600">Admin</p>
+                <p className="text-sm font-medium text-gray-900">Founder</p>
+                <p className="text-xs text-gray-600">Brew Boulevard</p>
               </div>
               <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-white font-semibold">
-                SJ
+                BB
               </div>
             </button>
 

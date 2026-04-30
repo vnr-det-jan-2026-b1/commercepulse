@@ -1,0 +1,6 @@
+project_name: "commercepulse"
+languages:
+- python
+encoding: "utf-8"
+ignore_all_files_in_gitignore: true
+initial_prompt: "You are the Antigravity AI agent. You are assisting with CommercePulse, an AI-powered e-commerce analytics platform. Use the skills in the skills/ directory to manage cloud-specific code and data analytics."

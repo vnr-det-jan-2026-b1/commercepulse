@@ -23,13 +23,49 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         print(f"[WARNING] Could not preload embedding model: {exc}")
         
-    # Initialize Redis caching
+    # Auto-create missing tables (like AIProductAnalysis) without Alembic
+    try:
+        from app.models.models import Base
+        from sqlalchemy import text
+        async with engine.connect() as conn:
+            # Must run outside of a transaction block. On some systems execution_options is a coroutine.
+            conn = await conn.execution_options(isolation_level="AUTOCOMMIT")
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+            print("[INFO] Database tables ensured.")
+    except Exception as exc:
+        print(f"[WARNING] Could not auto-create tables: {exc}")
+        
+    # Initialize Redis caching (with InMemory fallback)
     from fastapi_cache import FastAPICache
     from fastapi_cache.backends.redis import RedisBackend
+    from fastapi_cache.backends.inmemory import InMemoryBackend
     import redis.asyncio as aioredis
     
-    redis_client = aioredis.from_url(settings.REDIS_URL, encoding="utf-8", decode_responses=False)
-    FastAPICache.init(RedisBackend(redis_client), prefix="fastapi-cache")
+    try:
+        redis_client = aioredis.from_url(
+            settings.REDIS_URL, 
+            encoding="utf-8", 
+            decode_responses=False,
+            socket_connect_timeout=2.0  # Fail fast if Redis is down
+        )
+        # Ping to verify connection
+        await redis_client.ping()
+        FastAPICache.init(RedisBackend(redis_client), prefix="fastapi-cache")
+        print("[INFO] Redis cache initialized.")
+    except Exception as exc:
+        print(f"[WARNING] Redis unreachable, falling back to in-memory cache: {exc}")
+        FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
+        
+    # Start the WebSocket Redis Pub/Sub listener (optional/best-effort)
+    import asyncio
+    from app.routes.websockets import manager
+    try:
+        asyncio.create_task(manager.listen_to_redis())
+    except Exception:
+        print("[WARNING] Could not start Redis Pub/Sub listener.")
         
     yield
     await engine.dispose()
@@ -75,9 +111,7 @@ async def health():
     }
     # Best-effort Celery/Redis health
     try:
-        from app.services.tasks import ping # Assuming ping might be in tasks now or needs update
-        # Wait, I didn't move ping.py yet. I should move it to app/services/tasks.py or similar.
-
+        from app.services.tasks import ping
         res = ping.delay()
         pong = res.get(timeout=1.0)
         payload["celery"] = "ok" if pong == "pong" else "error"
