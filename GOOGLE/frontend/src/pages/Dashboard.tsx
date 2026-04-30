@@ -114,11 +114,11 @@ export default function Dashboard() {
   const alerts: InventoryAlert[] = alertsData?.alerts ?? [];
   const revenue: RevenueRow[] = revenueData?.data ?? [];
 
-  const getQty = (productId: string, fallback = 10) =>
+  const getQty = (productId: string, fallback = 1) =>
     restockQty[productId] ?? fallback;
 
-  const handleRestock = (productId: string, productName: string) => {
-    const qty = getQty(productId);
+  const handleRestock = (productId: string, productName: string, currentStock: number) => {
+    const qty = getQty(productId, Math.min(5, Math.max(10 - currentStock, 1)));
     if (qty < 1) return;
     setRestockError(null);
     restock.mutate({ productId, productName, quantity: qty }, {
@@ -708,7 +708,7 @@ export default function Dashboard() {
                                   style={{ width: '64px', padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--raised)', color: 'var(--text-primary)', fontSize: '13px', fontFamily: 'inherit', textAlign: 'center' }}
                                 />
                                 <button
-                                  onClick={() => handleRestock(p.product_id, p.product_name)}
+                                  onClick={() => handleRestock(p.product_id, p.product_name, p.current_stock)}
                                   disabled={restock.isPending || p.current_stock >= 10}
                                   style={{ padding: '7px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: p.current_stock >= 10 ? 'not-allowed' : 'pointer', background: p.current_stock >= 10 ? 'var(--raised)' : 'var(--accent)', color: p.current_stock >= 10 ? 'var(--text-secondary)' : 'white', fontFamily: 'inherit', opacity: restock.isPending ? 0.6 : 1 }}
                                 >
@@ -781,7 +781,7 @@ export default function Dashboard() {
                                         style={{ width: '48px', padding: '4px 6px', borderRadius: '5px', border: '1px solid var(--border)', background: 'var(--raised)', color: 'var(--text-primary)', fontSize: '11px', fontFamily: 'inherit', textAlign: 'center' }}
                                       />
                                       <button
-                                        onClick={() => handleRestock(p.product_id, p.product_name)}
+                                        onClick={() => handleRestock(p.product_id, p.product_name, p.current_stock)}
                                         disabled={restock.isPending || p.current_stock >= 10}
                                         style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, border: 'none', cursor: p.current_stock >= 10 ? 'not-allowed' : 'pointer', background: p.current_stock >= 10 ? 'var(--raised)' : 'var(--accent)', color: p.current_stock >= 10 ? 'var(--text-secondary)' : 'white', fontFamily: 'inherit', opacity: restock.isPending ? 0.6 : 1 }}
                                       >
