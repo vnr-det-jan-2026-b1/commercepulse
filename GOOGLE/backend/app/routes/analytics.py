@@ -157,9 +157,11 @@ async def product_stock(
     products = []
     for row in rows:
         extra = adjustments.get(row["product_id"], 0)
+        capped_stock = min(row["current_stock"] + extra, MAX_STOCK)
         products.append({
             **row,
-            "current_stock": min(row["current_stock"] + extra, MAX_STOCK),
+            "current_stock": capped_stock,
+            "initial_stock": MAX_STOCK,  # always show relative to MAX_STOCK for UI consistency
         })
     return {"seller_id": seller_id, "products": products}
 
@@ -227,11 +229,15 @@ async def product_recommendations(
         except Exception as e:
             logger.warning("Gemini insights skipped: %s", e)
 
+    MAX_STOCK = 10
     enriched = []
     for row in rows:
         insight = ai_insights.get(row["product_id"], {})
+        capped_stock = min(int(row.get("current_stock", 0)), MAX_STOCK)
         enriched.append({
             **row,
+            "current_stock": capped_stock,
+            "initial_stock": MAX_STOCK,
             "ai_insight": insight.get("insight"),
             "ai_urgency": insight.get("urgency"),
             "ai_revenue_impact": insight.get("monthly_revenue_impact"),
