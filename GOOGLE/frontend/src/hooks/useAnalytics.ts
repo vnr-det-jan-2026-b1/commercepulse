@@ -94,10 +94,12 @@ export const useAIBrief = (enabled: boolean) =>
 
 // ── Restock mutation ──────────────────────────────────────────────────────────
 
+type RestockVars = { productId: string; productName: string; quantity: number };
+
 export const useRestock = () => {
   const queryClient = useQueryClient();
-  return useMutation({
-    onMutate: async ({ productId, productName, quantity }: { productId: string; productName: string; quantity: number }) => {
+  return useMutation<unknown, unknown, RestockVars, { prevStock: unknown; prevRecs: [readonly unknown[], unknown][] }>({
+    onMutate: async ({ productId, productName, quantity }) => {
       saveHistory(productId, productName, quantity);
 
       // Cancel any in-flight polls so they don't overwrite our optimistic update.
@@ -138,9 +140,8 @@ export const useRestock = () => {
 
       return { prevStock, prevRecs };
     },
-    mutationFn: ({ productId, quantity }: { productId: string; productName: string; quantity: number }) =>
-      restockProduct(productId, quantity),
-    onError: (_err: unknown, _vars: unknown, ctx: { prevStock: unknown; prevRecs: [unknown, unknown][] } | undefined) => {
+    mutationFn: ({ productId, quantity }) => restockProduct(productId, quantity),
+    onError: (_err, _vars, ctx) => {
       if (ctx?.prevStock) queryClient.setQueryData(['stock'], ctx.prevStock);
       ctx?.prevRecs?.forEach(([key, data]) => queryClient.setQueryData(key as Parameters<typeof queryClient.setQueryData>[0], data));
     },
