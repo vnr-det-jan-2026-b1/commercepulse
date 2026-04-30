@@ -2,6 +2,7 @@
 from collections import defaultdict
 from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel, Field
+from typing import List
 
 from app.core.security import enforce_seller_scope
 from app.clients import bigquery_client as bq
@@ -10,14 +11,34 @@ from app.services import analytics_queries as q
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 # In-memory restock store: seller_id → { product_id: total_units_added }
-# Persists for the lifetime of the server process. Avoids BigQuery DML entirely.
 _restock_store: dict[str, dict[str, int]] = defaultdict(dict)
+
+# In-memory purchase store: seller_id → { product_id: total_units_purchased }
+# Immediately reflects purchases in stock without waiting for BigQuery streaming lag.
+_purchase_store: dict[str, dict[str, int]] = defaultdict(dict)
+
+
+def _effective_stock(bq_stock: int, product_id: str, seller_id: str, max_stock: int = 10) -> int:
+    """Apply restock additions and purchase deductions to a BigQuery stock value."""
+    restock_adj  = _restock_store.get(seller_id, {}).get(product_id, 0)
+    purchase_adj = _purchase_store.get(seller_id, {}).get(product_id, 0)
+    return max(0, min(bq_stock + restock_adj - purchase_adj, max_stock))
 
 
 class RestockRequest(BaseModel):
     seller_id: str
     product_id: str
     quantity: int = Field(..., ge=1, le=10000)
+
+
+class PurchaseItem(BaseModel):
+    product_id: str
+    quantity: int = Field(..., ge=1)
+
+
+class PurchaseRequest(BaseModel):
+    seller_id: str
+    items: List[PurchaseItem]
 
 
 @router.get("/dashboard")
@@ -153,17 +174,23 @@ async def product_stock(
 ):
     MAX_STOCK = 10
     rows = await bq.query(q.PRODUCT_STOCK_SQL, {"seller_id": seller_id})
-    adjustments = _restock_store.get(seller_id, {})
     products = []
     for row in rows:
-        extra = adjustments.get(row["product_id"], 0)
-        capped_stock = min(row["current_stock"] + extra, MAX_STOCK)
         products.append({
             **row,
-            "current_stock": capped_stock,
-            "initial_stock": MAX_STOCK,  # always show relative to MAX_STOCK for UI consistency
+            "current_stock": _effective_stock(int(row["current_stock"]), row["product_id"], seller_id, MAX_STOCK),
+            "initial_stock": MAX_STOCK,
         })
     return {"seller_id": seller_id, "products": products}
+
+
+@router.post("/stock/purchase")
+async def record_purchase(body: PurchaseRequest):
+    """Called by storefront at checkout for immediate stock deduction (no BigQuery lag)."""
+    store = _purchase_store[body.seller_id]
+    for item in body.items:
+        store[item.product_id] = store.get(item.product_id, 0) + item.quantity
+    return {"ok": True}
 
 
 @router.post("/stock/restock")
@@ -174,18 +201,17 @@ async def restock_product(body: RestockRequest):
     if not product_row:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    store = _restock_store[body.seller_id]
-    current = min(product_row["current_stock"] + store.get(body.product_id, 0), MAX_STOCK)
+    current = _effective_stock(int(product_row["current_stock"]), body.product_id, body.seller_id, MAX_STOCK)
     space   = MAX_STOCK - current
     if space <= 0:
         raise HTTPException(status_code=400, detail="Stock is already at maximum (10 units)")
     allowed = min(body.quantity, space)
 
-    # BigQuery: if units_sold > initial_stock (oversold), we need extra units to bridge the gap
-    units_sold_bq   = int(product_row.get("units_sold", 0))
+    # Persist to BigQuery: bridge gap when units_sold > initial_stock
+    units_sold_bq    = int(product_row.get("units_sold", 0))
     initial_stock_bq = int(product_row.get("initial_stock", 0))
     deficit = max(0, units_sold_bq - initial_stock_bq)
-    bq_qty  = allowed + deficit  # brings current_stock in BQ to exactly `allowed`
+    bq_qty  = allowed + deficit
 
     try:
         await bq.query(q.RESTOCK_SQL, {
@@ -194,11 +220,12 @@ async def restock_product(body: RestockRequest):
             "quantity":   bq_qty,
         })
     except Exception:
-        pass  # fall back to in-memory store if BQ write fails
+        pass
 
-    store[body.product_id] = store.get(body.product_id, 0) + allowed
-    updated = {**product_row, "current_stock": current + allowed}
-    return {"ok": True, "product_id": body.product_id, "quantity_added": allowed, "updated": updated}
+    _restock_store[body.seller_id][body.product_id] = \
+        _restock_store[body.seller_id].get(body.product_id, 0) + allowed
+    updated_stock = _effective_stock(int(product_row["current_stock"]), body.product_id, body.seller_id, MAX_STOCK)
+    return {"ok": True, "product_id": body.product_id, "quantity_added": allowed, "updated": {**product_row, "current_stock": updated_stock}}
 
 
 @router.get("/products")
@@ -233,10 +260,9 @@ async def product_recommendations(
     enriched = []
     for row in rows:
         insight = ai_insights.get(row["product_id"], {})
-        capped_stock = min(int(row.get("current_stock", 0)), MAX_STOCK)
         enriched.append({
             **row,
-            "current_stock": capped_stock,
+            "current_stock": _effective_stock(int(row.get("current_stock", 0)), row["product_id"], seller_id, MAX_STOCK),
             "initial_stock": MAX_STOCK,
             "ai_insight": insight.get("insight"),
             "ai_urgency": insight.get("urgency"),

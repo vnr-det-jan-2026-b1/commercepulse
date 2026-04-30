@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import type { CartItem } from "../store/cart";
 import { tracker } from "../utils/tracker";
+import type { StockMap } from "../App";
 
 interface Props {
   open: boolean;
@@ -10,15 +11,16 @@ interface Props {
   onRemove: (id: string) => void;
   onUpdateQuantity: (id: string, qty: number) => void;
   onClear: () => void;
-  onPurchase: () => void;
+  onPurchase: (items: CartItem[]) => void;
+  stockMap: StockMap;
 }
 
-export function CartDrawer({ open, onClose, items, total, onRemove, onUpdateQuantity, onClear, onPurchase }: Props) {
+export function CartDrawer({ open, onClose, items, total, onRemove, onUpdateQuantity, onClear, onPurchase, stockMap }: Props) {
   const navigate = useNavigate();
 
   function checkout() {
     tracker.purchase(items);
-    onPurchase();
+    onPurchase(items);   // passes purchased items so App can deduct stock
     onClear();
     onClose();
     navigate("/confirmed");
@@ -59,36 +61,48 @@ export function CartDrawer({ open, onClose, items, total, onRemove, onUpdateQuan
           </div>
         ) : (
           <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: "8px" }}>
-            {items.map(({ product, quantity }) => (
-              <div key={product.id} style={{ display: "flex", gap: "12px", alignItems: "center", padding: "12px", borderRadius: "10px", background: "var(--raised)" }}>
-                <img src={product.image} alt={product.name} style={{ width: "52px", height: "52px", objectFit: "cover", borderRadius: "8px", flexShrink: 0 }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{product.name}</p>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", margin: "6px 0" }}>
-                    <button
-                      onClick={() => onUpdateQuantity(product.id, quantity - 1)}
-                      style={{ width: "24px", height: "24px", borderRadius: "6px", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text-primary)", cursor: "pointer", fontSize: "14px", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "inherit", flexShrink: 0 }}
-                    >−</button>
-                    <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", minWidth: "16px", textAlign: "center" }}>{quantity}</span>
-                    <button
-                      onClick={() => onUpdateQuantity(product.id, quantity + 1)}
-                      style={{ width: "24px", height: "24px", borderRadius: "6px", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text-primary)", cursor: "pointer", fontSize: "14px", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "inherit", flexShrink: 0 }}
-                    >+</button>
+            {items.map(({ product, quantity }) => {
+              const availableStock = stockMap[product.id] ?? Infinity;
+              const atStockLimit = quantity >= availableStock;
+
+              return (
+                <div key={product.id} style={{ display: "flex", gap: "12px", alignItems: "center", padding: "12px", borderRadius: "10px", background: "var(--raised)" }}>
+                  <img src={product.image} alt={product.name} style={{ width: "52px", height: "52px", objectFit: "cover", borderRadius: "8px", flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{product.name}</p>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", margin: "6px 0" }}>
+                      <button
+                        onClick={() => onUpdateQuantity(product.id, quantity - 1)}
+                        style={{ width: "24px", height: "24px", borderRadius: "6px", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text-primary)", cursor: "pointer", fontSize: "14px", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "inherit", flexShrink: 0 }}
+                      >−</button>
+                      <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", minWidth: "16px", textAlign: "center" }}>{quantity}</span>
+                      <button
+                        onClick={() => { if (!atStockLimit) onUpdateQuantity(product.id, quantity + 1); }}
+                        disabled={atStockLimit}
+                        title={atStockLimit ? `Only ${availableStock} in stock` : undefined}
+                        style={{ width: "24px", height: "24px", borderRadius: "6px", border: "1px solid var(--border)", background: atStockLimit ? "var(--raised)" : "var(--surface)", color: atStockLimit ? "var(--text-secondary)" : "var(--text-primary)", cursor: atStockLimit ? "not-allowed" : "pointer", fontSize: "14px", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "inherit", flexShrink: 0, opacity: atStockLimit ? 0.4 : 1 }}
+                      >+</button>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <p style={{ fontSize: "13px", fontWeight: 700, color: "var(--accent)", margin: 0 }}>Rs.{(product.price * quantity).toLocaleString("en-IN")}</p>
+                      {atStockLimit && (
+                        <span style={{ fontSize: "10px", fontWeight: 700, color: "var(--danger)", background: "rgba(239,68,68,0.1)", borderRadius: "4px", padding: "1px 5px" }}>MAX</span>
+                      )}
+                    </div>
                   </div>
-                  <p style={{ fontSize: "13px", fontWeight: 700, color: "var(--accent)", margin: 0 }}>Rs.{(product.price * quantity).toLocaleString("en-IN")}</p>
+                  <button
+                    onClick={() => onRemove(product.id)}
+                    style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", padding: "4px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = "var(--danger)"; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = "var(--text-secondary)"; }}
+                  >
+                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
                 </div>
-                <button
-                  onClick={() => onRemove(product.id)}
-                  style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", padding: "4px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = "var(--danger)"; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = "var(--text-secondary)"; }}
-                >
-                  <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 

@@ -35,12 +35,15 @@ export function ProductDetail({ products, onAddToCart, cartItems, stockMap }: Pr
   const stock = stockRaw ?? 0;
   const soldOut = stockLoaded && stock === 0;
   const lowStock = stockLoaded && !soldOut && stock <= 3;
-  const inCart = cartItems.some((i) => i.product.id === product.id);
+  const inCartQty = cartItems.find((i) => i.product.id === product.id)?.quantity ?? 0;
+  const inCart = inCartQty > 0;
+  // How many more can still be added before hitting stock limit
+  const canAdd = stockLoaded ? Math.max(0, stock - inCartQty) : 5;
 
   function handleAdd() {
-    if (soldOut) return;
-    for (let i = 0; i < qty; i++) onAddToCart(product!);
-    tracker.addToCart(product!, qty);
+    if (soldOut || canAdd === 0) return;
+    const addQty = Math.min(qty, canAdd);
+    for (let i = 0; i < addQty; i++) onAddToCart(product!);
   }
 
   return (
@@ -88,7 +91,7 @@ export function ProductDetail({ products, onAddToCart, cartItems, stockMap }: Pr
             ● {soldOut ? "Out of Stock" : lowStock ? `Only ${stock} units left` : stockLoaded ? `In Stock — ${stock} units` : "In Stock"}
           </div>
 
-          {!soldOut && (
+          {!soldOut && canAdd > 0 && (
             <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
               <label style={{ fontSize: "13px", color: "var(--text-secondary)", fontWeight: 500 }}>Qty</label>
               <select
@@ -96,7 +99,7 @@ export function ProductDetail({ products, onAddToCart, cartItems, stockMap }: Pr
                 onChange={e => setQty(Number(e.target.value))}
                 style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "8px", padding: "8px 14px", fontSize: "14px", color: "var(--text-primary)", cursor: "pointer", fontFamily: "inherit" }}
               >
-                {Array.from({ length: Math.min(stockLoaded ? stock : 5, 5) }, (_, i) => i + 1).map(n => (
+                {Array.from({ length: Math.min(canAdd, 5) }, (_, i) => i + 1).map(n => (
                   <option key={n}>{n}</option>
                 ))}
               </select>
@@ -104,10 +107,11 @@ export function ProductDetail({ products, onAddToCart, cartItems, stockMap }: Pr
           )}
 
           <button
-            onClick={handleAdd} disabled={soldOut}
-            style={{ padding: "15px 24px", borderRadius: "8px", fontSize: "15px", fontWeight: 700, border: "none", cursor: soldOut ? "not-allowed" : "pointer", fontFamily: "inherit", background: soldOut ? "var(--raised)" : inCart ? "var(--accent-muted)" : "var(--accent)", color: soldOut ? "var(--text-secondary)" : inCart ? "var(--accent)" : "white" }}
+            onClick={handleAdd}
+            disabled={soldOut || canAdd === 0}
+            style={{ padding: "15px 24px", borderRadius: "8px", fontSize: "15px", fontWeight: 700, border: "none", cursor: (soldOut || canAdd === 0) ? "not-allowed" : "pointer", fontFamily: "inherit", background: (soldOut || canAdd === 0) ? "var(--raised)" : inCart ? "var(--accent-muted)" : "var(--accent)", color: (soldOut || canAdd === 0) ? "var(--text-secondary)" : inCart ? "var(--accent)" : "white" }}
           >
-            {soldOut ? "Out of Stock" : inCart ? "✓ Added to Cart" : "Add to Cart"}
+            {soldOut ? "Out of Stock" : canAdd === 0 ? "Max in Cart" : inCart ? "✓ Add More" : "Add to Cart"}
           </button>
 
           {/* Trust badges */}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
 import { Home } from "./pages/Home";
 import { ProductDetail } from "./pages/ProductDetail";
@@ -6,6 +6,7 @@ import { OrderConfirmed } from "./pages/OrderConfirmed";
 import { CartDrawer } from "./components/CartDrawer";
 import { useCart } from "./store/cart";
 import { tracker } from "./utils/tracker";
+import type { CartItem } from "./store/cart";
 import type { Product } from "./data/products";
 import "./index.css";
 
@@ -61,7 +62,7 @@ function App() {
       .catch(() => {});
   }, []);
 
-  function refreshStock() {
+  const refreshStock = useCallback(() => {
     fetch(`${API_URL}/v1/analytics/stock?seller_id=${SELLER_ID}`)
       .then(r => r.json())
       .then(data => {
@@ -70,20 +71,54 @@ function App() {
         setStockMap(map);
       })
       .catch(() => {});
-  }
+  }, []);
 
   useEffect(() => {
     refreshStock();
     const interval = setInterval(refreshStock, 30_000);
     return () => clearInterval(interval);
-  }, []);
+  }, [refreshStock]);
 
   function handleAddToCart(product: Product) {
-    const stockRaw = stockMap[product.id];
-    if (stockRaw !== undefined && stockRaw <= 0) return;
+    const stock = stockMap[product.id];
+    if (stock !== undefined && stock <= 0) return;
+
+    // Don't exceed available stock when items are already in cart
+    const inCart = items.find(i => i.product.id === product.id)?.quantity ?? 0;
+    if (stock !== undefined && inCart >= stock) return;
+
     add(product);
     tracker.addToCart(product, 1);
     setCartOpen(true);
+  }
+
+  async function handlePurchase(purchasedItems: CartItem[]) {
+    // 1. Immediately update backend in-memory purchase store (no BigQuery lag)
+    try {
+      await fetch(`${API_URL}/v1/analytics/stock/purchase`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          seller_id: SELLER_ID,
+          items: purchasedItems.map(({ product, quantity }) => ({
+            product_id: product.id,
+            quantity,
+          })),
+        }),
+      });
+    } catch { /* ignore — events still go to BigQuery */ }
+
+    // 2. Immediately deduct from local stockMap so UI reflects purchase at once
+    setStockMap(prev => {
+      const next = { ...prev };
+      for (const { product, quantity } of purchasedItems) {
+        next[product.id] = Math.max(0, (next[product.id] ?? 0) - quantity);
+      }
+      return next;
+    });
+
+    // 3. Re-fetch from backend after a short delay to get server-confirmed stock
+    setTimeout(refreshStock, 3000);
   }
 
   return (
@@ -132,7 +167,8 @@ function App() {
           onRemove={remove}
           onUpdateQuantity={updateQuantity}
           onClear={clear}
-          onPurchase={() => setTimeout(refreshStock, 2000)}
+          onPurchase={handlePurchase}
+          stockMap={stockMap}
         />
       </div>
     </BrowserRouter>
