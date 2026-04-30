@@ -1,4 +1,5 @@
 """Analytics routes — GET /analytics/*"""
+import time
 from collections import defaultdict
 from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel, Field
@@ -11,16 +12,45 @@ from app.services import analytics_queries as q
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 # In-memory stores for immediate feedback (no BigQuery streaming lag).
-# BigQuery is the source of truth; these bridge the gap until it propagates.
-_restock_store:  dict[str, dict[str, int]] = defaultdict(dict)
+# BigQuery is the source of truth; these bridge the gap until DML propagates.
+#
+# _restock_store entries expire after _RESTOCK_TTL_S seconds — by that point
+# BigQuery has absorbed the DML UPDATE and bq_stock already reflects the addition.
+# Keeping the delta past the TTL would double-count it.
+_RESTOCK_TTL_S = 8
+_restock_store:  dict[str, dict[str, tuple[int, float]]] = defaultdict(dict)
 _purchase_store: dict[str, dict[str, int]] = defaultdict(dict)
 
 
+def _restock_delta(seller_id: str, product_id: str) -> int:
+    """Return the transient restock delta that has not yet been absorbed by BQ."""
+    entry = _restock_store.get(seller_id, {}).get(product_id)
+    if not entry:
+        return 0
+    qty, ts = entry
+    if time.time() - ts > _RESTOCK_TTL_S:
+        _restock_store[seller_id].pop(product_id, None)
+        return 0
+    return qty
+
+
 def _effective_stock(bq_stock: int, product_id: str, seller_id: str) -> int:
-    """BigQuery stock + in-memory restock additions - in-memory purchase deductions."""
-    restock  = _restock_store.get(seller_id, {}).get(product_id, 0)
+    """BigQuery stock + transient restock delta - in-memory purchase deductions."""
+    restock  = _restock_delta(seller_id, product_id)
     purchase = _purchase_store.get(seller_id, {}).get(product_id, 0)
     return max(0, bq_stock + restock - purchase)
+
+
+def _recommendation_label(
+    stock: int, demand_score: float, views: int, purchase_events: int, conv_pct: float
+) -> str:
+    """Mirror the CASE logic in RECOMMENDATIONS_SQL so labels match effective stock."""
+    if stock <= 2 and demand_score >= 1:    return "RESTOCK_URGENT"
+    if stock <= 4 and demand_score >= 0.5:  return "RESTOCK_SOON"
+    if views >= 5 and conv_pct >= 20:       return "INCREASE_PRICE"
+    if views >= 4 and conv_pct < 5:         return "DISCOUNT"
+    if views < 2 and purchase_events == 0:  return "DONT_RESTOCK"
+    return "MAINTAIN"
 
 
 class RestockRequest(BaseModel):
@@ -196,26 +226,27 @@ async def restock_product(body: RestockRequest):
     if not product_row:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    # Persist to BigQuery
-    try:
-        await bq.query(q.RESTOCK_SQL, {
-            "product_id": body.product_id,
-            "seller_id":  body.seller_id,
-            "quantity":   body.quantity,
-        })
-    except Exception:
-        pass  # fall back to in-memory if BQ write fails
+    # Persist to BigQuery — let errors surface so the frontend knows the write failed.
+    await bq.query(q.RESTOCK_SQL, {
+        "product_id": body.product_id,
+        "seller_id":  body.seller_id,
+        "quantity":   body.quantity,
+    })
 
-    # Also update in-memory store for immediate API response
-    _restock_store[body.seller_id][body.product_id] = \
-        _restock_store[body.seller_id].get(body.product_id, 0) + body.quantity
+    # Record a transient delta that expires once BQ DML propagates (_RESTOCK_TTL_S).
+    prev_qty, prev_ts = _restock_store[body.seller_id].get(body.product_id, (0, 0.0))
+    if time.time() - prev_ts <= _RESTOCK_TTL_S:
+        new_qty = prev_qty + body.quantity
+    else:
+        new_qty = body.quantity
+    _restock_store[body.seller_id][body.product_id] = (new_qty, time.time())
 
-    updated_stock = _effective_stock(int(product_row["current_stock"]), body.product_id, body.seller_id)
+    new_stock = _effective_stock(int(product_row["current_stock"]), body.product_id, body.seller_id)
     return {
         "ok": True,
-        "product_id":    body.product_id,
+        "product_id":     body.product_id,
         "quantity_added": body.quantity,
-        "updated": {**product_row, "current_stock": updated_stock + body.quantity},
+        "updated": {**product_row, "current_stock": new_stock},
     }
 
 
@@ -250,9 +281,18 @@ async def product_recommendations(
     enriched = []
     for row in rows:
         insight = ai_insights.get(row["product_id"], {})
+        eff_stock = _effective_stock(int(row.get("current_stock", 0)), row["product_id"], seller_id)
+        label = _recommendation_label(
+            stock=eff_stock,
+            demand_score=float(row.get("demand_score") or 0),
+            views=int(row.get("views") or 0),
+            purchase_events=int(row.get("purchase_events") or 0),
+            conv_pct=float(row.get("conversion_pct") or 0),
+        )
         enriched.append({
             **row,
-            "current_stock": _effective_stock(int(row.get("current_stock", 0)), row["product_id"], seller_id),
+            "current_stock":     eff_stock,
+            "recommendation":    label,
             "ai_insight":        insight.get("insight"),
             "ai_urgency":        insight.get("urgency"),
             "ai_revenue_impact": insight.get("monthly_revenue_impact"),

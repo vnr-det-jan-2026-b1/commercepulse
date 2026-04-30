@@ -97,11 +97,18 @@ export const useAIBrief = (enabled: boolean) =>
 export const useRestock = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ productId, productName, quantity }: { productId: string; productName: string; quantity: number }) => {
-      // 1. Save to restock history log (for display)
+    onMutate: async ({ productId, productName, quantity }: { productId: string; productName: string; quantity: number }) => {
       saveHistory(productId, productName, quantity);
 
-      // 2. Optimistically update stock cache immediately
+      // Cancel any in-flight polls so they don't overwrite our optimistic update.
+      await queryClient.cancelQueries({ queryKey: ['stock'] });
+      await queryClient.cancelQueries({ queryKey: ['recommendations'] });
+
+      // Snapshot current cache for rollback on error.
+      const prevStock = queryClient.getQueryData<{ products: StockItem[] }>(['stock']);
+      const prevRecs  = queryClient.getQueriesData<{ recommendations: Recommendation[] }>({ queryKey: ['recommendations'] });
+
+      // Apply optimistic update.
       queryClient.setQueryData(['stock'], (old: { products: StockItem[] } | undefined) => {
         if (!old) return old;
         return {
@@ -114,7 +121,6 @@ export const useRestock = () => {
         };
       });
 
-      // 3. Update recommendations cache with recomputed label
       queryClient.setQueriesData(
         { queryKey: ['recommendations'] },
         (old: { recommendations: Recommendation[] } | undefined) => {
@@ -130,15 +136,20 @@ export const useRestock = () => {
         }
       );
 
-      // 4. Call backend (writes to BigQuery + in-memory store)
-      return restockProduct(productId, quantity);
+      return { prevStock, prevRecs };
     },
-    onSuccess: () => {
-      // Re-fetch after a short delay to get BigQuery-confirmed values
+    mutationFn: ({ productId, quantity }: { productId: string; productName: string; quantity: number }) =>
+      restockProduct(productId, quantity),
+    onError: (_err: unknown, _vars: unknown, ctx: { prevStock: unknown; prevRecs: [unknown, unknown][] } | undefined) => {
+      if (ctx?.prevStock) queryClient.setQueryData(['stock'], ctx.prevStock);
+      ctx?.prevRecs?.forEach(([key, data]) => queryClient.setQueryData(key as Parameters<typeof queryClient.setQueryData>[0], data));
+    },
+    onSettled: () => {
+      // 4 s: BQ DML propagates in ≤3 s; TTL expires at 8 s — safe window to refetch.
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['stock'] });
         queryClient.invalidateQueries({ queryKey: ['recommendations'] });
-      }, 3000);
+      }, 4000);
     },
   });
 };

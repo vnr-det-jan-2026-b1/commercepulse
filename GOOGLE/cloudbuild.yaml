@@ -70,7 +70,7 @@ steps:
       - --region=asia-south1
       - --platform=managed
       - --min-instances=1
-      - --max-instances=10
+      - --max-instances=1
       - --memory=2Gi
       - --cpu=1
       - --concurrency=80
