@@ -49,16 +49,16 @@ export const useStorefront = (days: number, granularity: 'day' | 'hour') =>
 export const useStock = () =>
   useQuery<{ products: StockItem[] }>({
     queryKey: ['stock'],
-    queryFn: fetchStock,           // BigQuery is source of truth — no localStorage inflation
-    refetchInterval: 10_000,       // refresh every 10 s to catch purchase events quickly
+    queryFn: fetchStock,
+    refetchInterval: 2_000,   // 2 s — picks up _purchase_store deductions almost instantly
     staleTime: 0,
   });
 
 export const useRecommendations = (days: number) =>
   useQuery<{ recommendations: Recommendation[]; ai_powered?: boolean }>({
     queryKey: ['recommendations', days],
-    queryFn: () => fetchRecommendations(days),  // BigQuery is source of truth
-    refetchInterval: 15_000,
+    queryFn: () => fetchRecommendations(days),
+    refetchInterval: 5_000,
     staleTime: 0,
   });
 
