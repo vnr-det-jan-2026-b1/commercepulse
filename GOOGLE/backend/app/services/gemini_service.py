@@ -1,47 +1,50 @@
 """
 Gemini AI service — builds seller context from BigQuery data
-and calls Vertex AI Gemini API for recommendations and chat.
+and calls Gemini for recommendations and chat.
 
-Replaces LangGraph + Groq (Azure) with Vertex AI Gemini (Google).
-Agent schema outputs reused from AZURE/ai_agents/app/agents/schemas.py.
+Uses google.genai SDK.  Authentication priority:
+  1. GEMINI_API_KEY env var  → Gemini Developer API (AI Studio key)
+  2. Fallback                → Vertex AI with application default credentials
 """
+import asyncio
 import json
 import logging
 from typing import AsyncIterator
 
-import vertexai
-from vertexai.generative_models import GenerativeModel, GenerationConfig, Part
+from google import genai
+from google.genai import types as genai_types
 
 from app.core.config import settings
 from app.clients import bigquery_client as bq
 
 logger = logging.getLogger(__name__)
 
-# Lazy init — called once on first use
-_model: GenerativeModel | None = None
+_client: genai.Client | None = None
 
-def _get_model() -> GenerativeModel:
-    global _model
-    if _model is None:
-        vertexai.init(project=settings.GCP_PROJECT, location=settings.VERTEX_LOCATION)
-        _model = GenerativeModel(settings.GEMINI_MODEL)
-    return _model
+
+def _get_client() -> genai.Client:
+    global _client
+    if _client is None:
+        if settings.GEMINI_API_KEY:
+            _client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        else:
+            _client = genai.Client(
+                vertexai=True,
+                project=settings.GCP_PROJECT,
+                location=settings.VERTEX_LOCATION,
+            )
+    return _client
 
 
 # ── Context builder ────────────────────────────────────────────
 
 async def build_seller_context(seller_id: str) -> dict:
-    """
-    Pull key metrics from BigQuery gold tables and format into
-    a structured dict for Gemini prompt grounding.
-    """
     kpis_sql = f"""
         SELECT total_net_revenue, total_orders, cancellation_rate_pct,
                rto_rate_pct, avg_roas, low_stock_count, stockout_count
         FROM `{settings.BQ_DATASET_GOLD}.seller_dashboard_kpis`
         WHERE seller_id = @seller_id LIMIT 1
     """
-
     funnel_sql = f"""
         SELECT sku, marketplace,
                SUM(impressions) AS impressions,
@@ -57,7 +60,6 @@ async def build_seller_context(seller_id: str) -> dict:
         ORDER BY conv_pct DESC
         LIMIT 5
     """
-
     risk_sql = f"""
         SELECT sku, marketplace, available_stock, days_until_stockout,
                risk_level, recommended_reorder_qty
@@ -67,15 +69,12 @@ async def build_seller_context(seller_id: str) -> dict:
         ORDER BY days_until_stockout ASC
         LIMIT 5
     """
-
     params = {"seller_id": seller_id}
-
     kpis, funnel_top, risks = await asyncio.gather(
         bq.query_single(kpis_sql, params),
         bq.query(funnel_sql, params),
         bq.query(risk_sql, params),
     )
-
     return {
         "seller_id": seller_id,
         "kpis": kpis or {},
@@ -87,7 +86,7 @@ async def build_seller_context(seller_id: str) -> dict:
 # ── Recommendation brief ───────────────────────────────────────
 
 RECOMMENDATION_PROMPT = """
-You are a senior e-commerce analytics consultant advising Indian marketplace sellers (Flipkart, Amazon India, Meesho, Myntra).
+You are a senior e-commerce analytics consultant advising Indian marketplace sellers.
 
 Seller: {seller_id}
 Analysis Period: Last 30 days
@@ -130,11 +129,6 @@ Output as structured JSON matching this schema:
 
 
 async def generate_recommendations(seller_id: str) -> dict:
-    """
-    Build seller context from BigQuery and generate Gemini recommendation brief.
-    Returns parsed JSON matching ExecutiveActionPlan schema.
-    """
-    import asyncio
     ctx = await build_seller_context(seller_id)
     kpis = ctx.get("kpis") or {}
 
@@ -145,7 +139,7 @@ async def generate_recommendations(seller_id: str) -> dict:
 
     risk_lines = "\n".join(
         f"  - {r.get('sku')} ({r.get('marketplace')}): {r.get('available_stock')} units, "
-        f"{r.get('days_until_stockout'):.0f} days left [{r.get('risk_level')}]"
+        f"{r.get('days_until_stockout') or 0:.0f} days left [{r.get('risk_level')}]"
         for r in ctx.get("inventory_risks", [])
     ) or "  No critical risks"
 
@@ -162,10 +156,12 @@ async def generate_recommendations(seller_id: str) -> dict:
         risk_data=risk_lines,
     )
 
-    model = _get_model()
-    response = model.generate_content(
-        prompt,
-        generation_config=GenerationConfig(
+    client = _get_client()
+    response = await asyncio.to_thread(
+        client.models.generate_content,
+        model=settings.GEMINI_MODEL,
+        contents=prompt,
+        config=genai_types.GenerateContentConfig(
             temperature=0.3,
             response_mime_type="application/json",
         ),
@@ -179,12 +175,11 @@ async def generate_recommendations(seller_id: str) -> dict:
 
 # ── Streaming chat ─────────────────────────────────────────────
 
-CHAT_SYSTEM_PROMPT = """
-You are CommercePulse AI, an expert e-commerce analytics assistant for Indian marketplace sellers.
-You have access to the seller's real-time data. Answer questions with specific numbers from their data.
-When you don't have specific data, say so clearly and give general best practices.
-Keep answers concise and actionable. Always think in terms of revenue impact in INR.
-"""
+CHAT_SYSTEM_PROMPT = (
+    "You are CommercePulse AI, an expert e-commerce analytics assistant for Indian "
+    "marketplace sellers. Answer questions with specific numbers from their data. "
+    "Keep answers concise and actionable. Always think in terms of revenue impact in INR."
+)
 
 
 async def stream_chat(
@@ -192,39 +187,36 @@ async def stream_chat(
     message: str,
     history: list[dict] | None = None,
 ) -> AsyncIterator[str]:
-    """
-    Stream a Gemini chat response grounded in seller data.
-    Yields text chunks as they arrive for SSE streaming.
-    """
     ctx = await build_seller_context(seller_id)
+    kpis = ctx.get("kpis") or {}
 
-    grounding = f"""
-Seller context for {seller_id}:
-Revenue: ₹{float(ctx.get('kpis', {}).get('total_net_revenue') or 0):,.0f} (last 30d)
-Orders: {int(ctx.get('kpis', {}).get('total_orders') or 0):,}
-ROAS: {float(ctx.get('kpis', {}).get('avg_roas') or 0):.2f}x
-Critical inventory alerts: {len([r for r in ctx.get('inventory_risks', []) if r.get('risk_level') == 'CRITICAL'])}
-
-User question: {message}
-"""
-
-    model = _get_model()
-    stream = model.generate_content(
-        [CHAT_SYSTEM_PROMPT, grounding],
-        generation_config=GenerationConfig(temperature=0.5),
-        stream=True,
+    grounding = (
+        f"Seller context for {seller_id}:\n"
+        f"Revenue: ₹{float(kpis.get('total_net_revenue') or 0):,.0f} (last 30d)\n"
+        f"Orders: {int(kpis.get('total_orders') or 0):,}\n"
+        f"ROAS: {float(kpis.get('avg_roas') or 0):.2f}x\n"
+        f"Critical inventory alerts: {len([r for r in ctx.get('inventory_risks', []) if r.get('risk_level') == 'CRITICAL'])}\n\n"
+        f"User question: {message}"
     )
 
-    for chunk in stream:
-        if chunk.text:
-            yield chunk.text
+    client = _get_client()
 
+    def _stream():
+        for chunk in client.models.generate_content_stream(
+            model=settings.GEMINI_MODEL,
+            contents=[CHAT_SYSTEM_PROMPT, grounding],
+            config=genai_types.GenerateContentConfig(temperature=0.5),
+        ):
+            if chunk.text:
+                yield chunk.text
+
+    for text in await asyncio.to_thread(lambda: list(_stream())):
+        yield text
+
+
+# ── Per-product insights ───────────────────────────────────────
 
 async def generate_product_insights(seller_id: str, recs: list[dict]) -> dict:
-    """
-    Batch Gemini call: generates per-product natural language insights.
-    Returns dict keyed by product_id. Fails silently if Gemini unavailable.
-    """
     if not recs:
         return {}
 
@@ -236,36 +228,31 @@ async def generate_product_insights(seller_id: str, recs: list[dict]) -> dict:
         for r in recs
     )
 
-    prompt = f"""You are an e-commerce analytics AI for Indian marketplace sellers (Flipkart, Amazon India, Meesho).
+    prompt = f"""You are an e-commerce analytics AI for Indian marketplace sellers.
 
 Seller: {seller_id}
-Product data (last 7 days of real storefront activity):
+Product data (last 7 days):
 {products_summary}
 
-For EVERY product above, generate a specific data-driven recommendation. Cite exact numbers and ₹ values.
-
-Return ONLY a valid JSON array with exactly {len(recs)} entries, no other text:
+For EVERY product, generate a specific data-driven recommendation. Cite exact numbers and ₹ values.
+Return ONLY a valid JSON array with exactly {len(recs)} entries:
 [
   {{
     "product_id": "P001",
-    "insight": "Restock 8 units now — selling 3 units/day at ₹2,999 and stock hits zero in 2 days, costing ₹72K in lost revenue this month.",
-    "urgency": "CRITICAL",
-    "monthly_revenue_impact": 72000
+    "insight": "1-sentence insight citing actual numbers",
+    "urgency": "CRITICAL|HIGH|MEDIUM|LOW",
+    "monthly_revenue_impact": 0
   }}
 ]
-
-Rules:
-- urgency: CRITICAL (stock=0 or demand high + low stock) | HIGH (restock soon) | MEDIUM (pricing action) | LOW (maintain or skip)
-- insight: 1 sentence, under 25 words, cite actual numbers from the data
-- monthly_revenue_impact: realistic INR estimate of monthly impact if action taken
-- Include all {len(recs)} products
-"""
+Include all {len(recs)} products."""
 
     try:
-        model = _get_model()
-        response = model.generate_content(
-            prompt,
-            generation_config=GenerationConfig(
+        client = _get_client()
+        response = await asyncio.to_thread(
+            client.models.generate_content,
+            model=settings.GEMINI_MODEL,
+            contents=prompt,
+            config=genai_types.GenerateContentConfig(
                 temperature=0.2,
                 response_mime_type="application/json",
             ),
@@ -275,6 +262,3 @@ Rules:
     except Exception as e:
         logger.warning("Gemini product insights failed: %s", e)
         return {}
-
-
-import asyncio  # noqa: E402 — needed for gather in build_seller_context

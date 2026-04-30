@@ -24,9 +24,10 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379"
     CACHE_TTL_SECONDS: int = 3600
 
-    # Vertex AI
+    # Gemini
+    GEMINI_API_KEY:      str = ""           # AI Studio key — takes priority over Vertex AI
     VERTEX_LOCATION:     str = "us-central1"
-    GEMINI_MODEL:        str = "gemini-2.0-flash-001"
+    GEMINI_MODEL:        str = "gemini-1.5-flash"
 
     # Pub/Sub
     PUBSUB_EVENTS_TOPIC: str = "commercepulse-events"
