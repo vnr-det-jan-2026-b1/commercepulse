@@ -1,19 +1,25 @@
-# Azure Team - CommercePulse Backend
+# CommercePulse — Azure Production Suite
 
-This directory contains the production-ready backend and infrastructure for Azure deployment.
+This directory contains the core services and infrastructure for the CommercePulse platform on Azure.
 
-## Components
-- **app/**: Core business logic, FastAPI routes, and SQLAlchemy models.
-- **workers/**: Celery application factory and background task configuration.
-- **infrastructure/**: Future-proofing for Azure-specific configurations (App Service, ACR, etc.).
-- **Brainstorming/**: Restored visual assets and logic diagrams.
+## 🏗️ Production Services
+- **[backend/](./backend)**: FastAPI Analytics & Ingestion Engine (Port 8010)
+- **[frontend/](./frontend)**: React + Vite + TailwindCSS Dashboard (Port 4000)
+- **[ai_agents/](./ai_agents)**: LangGraph Multi-Agent Strategic Engine (Port 8001)
 
-## How to Deploy (Local)
-1. Copy `.env.example` to `.env`.
-2. Run `docker-compose up -d`.
-3. API available at `http://localhost:8000/docs`.
+## 🛠️ Infrastructure & Data
+- **[infrastructure/](./infrastructure)**: Deployment templates and container configurations.
+- **[commercepulse_testdata.xlsx](./commercepulse_testdata.xlsx)**: Standardized dataset for onboarding and validation.
 
-## Azure Readiness
-- Docker-ready
-- Environment variable-based configuration
-- Clean module structure for CI/CD
+## 🧠 Research & Assets
+- **[Brainstorming/](./Brainstorming)**: Architecture diagrams and strategy notes.
+- **[MENTOR.md](./MENTOR.md)**: Project guidelines and feedback logs.
+
+---
+
+### 🚀 Local Development
+1. Start the **Backend**: `cd backend && python -m uvicorn app.main:app --port 8010`
+2. Start the **AI Agents**: `cd ai_agents && python -m uvicorn main:app --port 8001`
+3. Start the **Frontend**: `cd frontend && npm run dev`
+
+*Ensure `.env` files are configured in each service directory using the provided `.env.example` templates.*

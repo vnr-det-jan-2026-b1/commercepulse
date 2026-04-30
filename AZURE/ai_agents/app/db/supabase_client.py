@@ -1,10 +1,23 @@
 import os
+import re
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
 load_dotenv()
 
 _supabase: Client = None
+
+# Regex for validating UUID v4 format
+_UUID_RE = re.compile(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+    re.IGNORECASE
+)
+
+
+def _is_valid_uuid(value: str) -> bool:
+    """Check if a string is a valid UUID format."""
+    return bool(value and _UUID_RE.match(value))
+
 
 def get_supabase_client() -> Client:
     global _supabase
@@ -20,7 +33,14 @@ def fetch_recent_context(seller_id: str, limit: int = 10) -> str:
     """
     Fetches the most recent product summaries from the product_embeddings table
     to give the AI Agent real context.
+    
+    Validates seller_id as a proper UUID before querying to prevent
+    Postgres 22P02 errors ('invalid input syntax for type uuid').
     """
+    # ── Guard: validate UUID format before touching the DB ──
+    if not _is_valid_uuid(seller_id):
+        return f"Skipped Supabase fetch: seller_id '{seller_id}' is not a valid UUID."
+
     try:
         supabase = get_supabase_client()
         response = supabase.table("product_embeddings") \
@@ -40,5 +60,5 @@ def fetch_recent_context(seller_id: str, limit: int = 10) -> str:
             
         return "\n".join(context_items)
     except Exception as e:
-        print(f"Error fetching Supabase context for seller {seller_id}: {e}")
+        print(f"  ⚠️ Supabase context fetch error: {e}")
         return "Failed to fetch context from database."

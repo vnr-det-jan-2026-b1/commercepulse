@@ -32,7 +32,10 @@ services:
     container_name: commercepulse_ingestion
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8010:8000"
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     env_file:
       - .env
     environment:
@@ -42,7 +45,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Abhilash@142}
       APP_ENV: ${APP_ENV:-development}
-      API_KEY: ${API_KEY:-dev-api-key}
+      API_KEY: your-production-api-key
       REDIS_URL: redis://redis:6379/0
       AI_AGENTS_URL: http://ai_agents:8001
     volumes:
@@ -60,6 +63,9 @@ services:
       dockerfile: Dockerfile
     container_name: commercepulse_worker
     restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     command: >
       celery -A workers.celery_app worker
         --loglevel=info
@@ -92,6 +98,9 @@ services:
       dockerfile: Dockerfile
     container_name: commercepulse_beat
     restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     command: >
       celery -A workers.celery_app beat
         --loglevel=info
@@ -133,6 +142,8 @@ services:
     volumes:
       - ../ai_agents/app:/app/app:ro
       - ../ai_agents/main.py:/app/main.py:ro
+    ports:
+      - "8001:8001"
 
 volumes:
   model_cache:

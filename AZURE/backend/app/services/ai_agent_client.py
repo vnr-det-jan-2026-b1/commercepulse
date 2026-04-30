@@ -93,3 +93,36 @@ async def trigger_whatif_stream(seller_id: str, scenario: str):
         import json
         logger.error(f"Error streaming what-if from AI agents API: {exc}")
         yield f"data: {json.dumps({'error': str(exc)})}\n\n".encode('utf-8')
+
+async def trigger_product_analysis(
+    seller_id: str, 
+    product_id: str,
+    product_data: Dict[str, Any]
+) -> Optional[Dict[str, Any]]:
+    """
+    Sends an async POST request to the ai_agents service to run a per-product analysis.
+    """
+    url = f"{settings.AI_AGENTS_URL}/api/v1/analyze/product"
+    
+    payload = {
+        "seller_id": seller_id,
+        "product_id": product_id,
+        "product_data": product_data
+    }
+    
+    try:
+        # Increase timeout as agent simulations can take a while
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            logger.info(f"Triggering AI product analysis for product {product_id} to URL {url}")
+            response = await client.post(url, json=payload)
+            response.raise_for_status()
+            
+            data = response.json()
+            return data
+            
+    except httpx.HTTPError as exc:
+        logger.error(f"HTTP Exception while connecting to AI agents API: {exc}")
+        return None
+    except Exception as exc:
+        logger.error(f"Error calling AI agents API for product analysis: {exc}")
+        return None

@@ -38,8 +38,12 @@ async def _run_embed(seller_id: str, snap_date_str: str) -> int:
                 p.product_id, p.sku, p.product_name, p.category,
                 i.marketplace,
                 i.available_stock, i.reorder_threshold,
-                pr.selling_price, pr.net_margin, pr.margin_pct,
-                t.impressions, t.clicks, t.orders AS ad_orders, t.roas
+                pr.selling_price,
+                CASE WHEN pr.selling_price > 0 AND pr.cost_price IS NOT NULL 
+                     THEN ((pr.selling_price - pr.cost_price - COALESCE(pr.commission_amount, 0)) / pr.selling_price) * 100 
+                     ELSE NULL END AS margin_pct,
+                t.impressions, t.clicks, t.orders AS ad_orders,
+                CASE WHEN t.ad_spend > 0 THEN t.revenue_from_ads / t.ad_spend ELSE 0 END AS roas
             FROM products p
             LEFT JOIN inventory_snapshots i
                 ON i.product_id = p.product_id AND i.seller_id = :sid
@@ -105,7 +109,7 @@ async def _run_embed(seller_id: str, snap_date_str: str) -> int:
             set_={
                 "summary_text": ins.excluded.summary_text,
                 "embedding":    ins.excluded.embedding,
-                "metadata":     ins.excluded.metadata,  # DB column name (not ORM attr 'meta')
+                "meta":         ins.excluded.meta,
             },
         )
         await db.execute(stmt)
@@ -309,7 +313,109 @@ def weekly_health_check():
             except Exception as e:
                 logger.error("[Celery] weekly_health_check failed for seller=%s: %s", sid, e)
                 results.append({"seller_id": sid, "error": str(e)})
-                
+
         return results
+
+    return asyncio.run(_run())
+
+# ── Task 5: Ping (for health checks) ───────────────────────────
+@shared_task(name="app.services.tasks.ping", queue="embed")
+def ping():
+    return "pong"
+
+# ── Task 6: Analyze all products (batch AI analysis) ───────────
+@shared_task(
+    name="app.services.tasks.analyze_all_products",
+    queue="embed",
+)
+def analyze_all_products(seller_id: str, snap_date: str):
+    """
+    Triggered after auto_embed.
+    Analyzes each product using the AI agent, with throttling.
+    """
+    async def _run():
+        from sqlalchemy import text
+        from app.db.session import AsyncSessionLocal
+        from app.services.ai_agent_client import trigger_product_analysis
+        from app.models.models import AIProductAnalysis
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        import asyncio
+
+        # Publish task start
+        import redis
+        from app.core.config import settings
+        import json
+        r = redis.from_url(settings.REDIS_URL, decode_responses=True)
+        r.publish(f"channel:{seller_id}", json.dumps({"event": "ai_product_analysis_started", "message": f"Starting per-product AI analysis for {snap_date}..."}))
+
+        async with AsyncSessionLocal() as db:
+            # 1. Fetch all unique products for the seller
+            sql = text("""
+                SELECT p.product_id, p.sku, p.product_name, p.category, p.marketplace
+                FROM products p
+                WHERE p.seller_id = :seller_id AND p.is_active = TRUE
+            """)
+            result = await db.execute(sql, {"seller_id": seller_id})
+            products = result.mappings().all()
+
+            logger.info("[Celery] analyze_all_products: found %d products for seller=%s", len(products), seller_id)
+            
+            analyzed_count = 0
+            
+            # 2. Iterate and analyze each product
+            for prod in products:
+                prod_id = str(prod["product_id"])
+                product_data = dict(prod)
+                product_data["product_id"] = prod_id
+                
+                try:
+                    logger.info("[Celery] Triggering analysis for product %s (%s)", prod_id, prod["product_name"])
+                    ai_result = await trigger_product_analysis(seller_id, prod_id, product_data)
+                    
+                    if ai_result and ai_result.get("status") == "success":
+                        result_data = ai_result.get("result", {})
+                        
+                        # Save to database
+                        stmt = pg_insert(AIProductAnalysis).values(
+                            seller_id=seller_id,
+                            product_id=prod_id,
+                            analysis_date=date.fromisoformat(snap_date),
+                            product_metrics=product_data,
+                            executive_summary=result_data,
+                            status="completed"
+                        ).on_conflict_do_update(
+                            index_elements=["seller_id", "product_id", "analysis_date"],
+                            set_={
+                                "executive_summary": result_data,
+                                "status": "completed",
+                                "product_metrics": product_data,
+                                "updated_at": text("NOW()")
+                            }
+                        )
+                        await db.execute(stmt)
+                        await db.commit()
+                        analyzed_count += 1
+                        
+                        # Emit a granular event so the frontend can update live
+                        r.publish(f"channel:{seller_id}", json.dumps({
+                            "event": "ai_product_analyzed",
+                            "product_id": prod_id,
+                            "product_name": prod["product_name"],
+                            "message": f"Analyzed {prod['product_name']}"
+                        }))
+                    
+                except Exception as e:
+                    logger.error("[Celery] Failed to analyze product %s: %s", prod_id, e)
+                
+                # Throttle to avoid hitting Groq rate limits (500ms delay)
+                await asyncio.sleep(0.5)
+
+        r.publish(f"channel:{seller_id}", json.dumps({
+            "event": "ai_product_analysis_complete", 
+            "message": f"Completed product analysis for {analyzed_count}/{len(products)} products.",
+            "count": analyzed_count
+        }))
+        
+        return {"seller_id": seller_id, "analyzed_count": analyzed_count, "total_products": len(products)}
 
     return asyncio.run(_run())

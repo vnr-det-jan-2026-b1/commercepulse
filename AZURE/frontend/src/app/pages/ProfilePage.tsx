@@ -15,23 +15,23 @@ export function ProfilePage() {
         <div className="lg:col-span-1">
           <div className="bg-white rounded-2xl p-8 shadow-sm text-center">
             <div className="w-32 h-32 mx-auto bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-white text-4xl font-semibold mb-6">
-              JD
+              BB
             </div>
-            <h2 className="text-2xl font-semibold text-gray-900 mb-2">John Doe</h2>
-            <p className="text-gray-600 mb-6">Store Owner</p>
+            <h2 className="text-2xl font-semibold text-gray-900 mb-2">Founder</h2>
+            <p className="text-gray-600 mb-6">Brew Boulevard</p>
             
             <div className="space-y-4 text-left">
               <div className="flex items-center gap-3 text-gray-600">
                 <Mail className="w-5 h-5" />
-                <span className="text-sm">john.doe@commercepulse.com</span>
+                <span className="text-sm">founder@brewboulevard.com</span>
               </div>
               <div className="flex items-center gap-3 text-gray-600">
                 <Phone className="w-5 h-5" />
-                <span className="text-sm">+1 (555) 123-4567</span>
+                <span className="text-sm">+91 98765 43210</span>
               </div>
               <div className="flex items-center gap-3 text-gray-600">
                 <MapPin className="w-5 h-5" />
-                <span className="text-sm">San Francisco, CA</span>
+                <span className="text-sm">Bengaluru, India</span>
               </div>
               <div className="flex items-center gap-3 text-gray-600">
                 <Calendar className="w-5 h-5" />
@@ -50,7 +50,7 @@ export function ProfilePage() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-gray-600">Total Revenue</span>
-                <span className="font-semibold text-gray-900">$148,250</span>
+                <span className="font-semibold text-gray-900">₹14,825,000</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-gray-600">Orders</span>
@@ -83,15 +83,15 @@ export function ProfilePage() {
             <div className="grid grid-cols-2 gap-6">
               <div>
                 <p className="text-sm text-gray-600 mb-1">Company</p>
-                <p className="font-semibold text-gray-900">CommercePulse Inc.</p>
+                <p className="font-semibold text-gray-900">Brew Boulevard</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600 mb-1">Department</p>
-                <p className="font-semibold text-gray-900">Sales & Analytics</p>
+                <p className="font-semibold text-gray-900">Executive</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600 mb-1">Role</p>
-                <p className="font-semibold text-gray-900">Store Owner</p>
+                <p className="font-semibold text-gray-900">Founder & CEO</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600 mb-1">Experience</p>
@@ -109,7 +109,7 @@ export function ProfilePage() {
                   <Award className="w-6 h-6 text-white" />
                 </div>
                 <h3 className="font-semibold text-gray-900 mb-2">Revenue Milestone</h3>
-                <p className="text-sm text-gray-600">Reached $1M in annual revenue</p>
+                <p className="text-sm text-gray-600">Reached ₹10M in annual revenue</p>
               </div>
 
               <div className="p-6 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl border border-green-200">
@@ -159,7 +159,7 @@ export function ProfilePage() {
                   color: "bg-purple-500",
                 },
                 {
-                  action: "Added new product: Bluetooth Speaker Elite",
+                  action: "Added new product: Artisan Cold Brew Concentrate",
                   time: "2 days ago",
                   color: "bg-amber-500",
                 },

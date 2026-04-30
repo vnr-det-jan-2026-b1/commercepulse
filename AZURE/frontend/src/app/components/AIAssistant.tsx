@@ -1,120 +1,139 @@
-import { useState } from "react";
-import { Sparkles, X, Send, Minimize2, Maximize2 } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Sparkles, X, Send, Minimize2, Maximize2, Loader2 } from "lucide-react";
+import { ensureSeller, apiClient } from "../services/api";
 
 const sampleQuestions = [
-  "What's my revenue trend?",
-  "Show low stock items",
-  "Top selling products",
-  "Customer satisfaction rate",
-];
-
-const aiResponses = [
-  {
-    question: "What's my revenue trend?",
-    answer: "Your revenue has grown by 12.5% this month, reaching $148,250. The trend shows steady growth with a strong performance in Electronics and Fashion categories. I recommend maintaining current inventory levels for these categories.",
-  },
-  {
-    question: "Show low stock items",
-    answer: "You have 118 items with low stock levels. The most critical are: Yoga Mat Premium (38 units), Running Shoes Elite (15 units), and Smart Watch Series 5 (89 units). I suggest reordering these items soon to avoid stockouts.",
-  },
-  {
-    question: "Top selling products",
-    answer: "Your top 3 selling products are: 1) Wireless Headphones Pro (245 units), 2) Smart Watch Series 5 (89 units), 3) Bluetooth Speaker (198 units). These items contribute to 35% of your total revenue.",
-  },
-  {
-    question: "Customer satisfaction rate",
-    answer: "Your current customer satisfaction rate is 94.2%, which is excellent! Return rate is at 7.4%, slightly above the 5% target. Consider reviewing product descriptions for the Electronics category to reduce returns.",
-  },
+  "What's my revenue trend this month?",
+  "Show me my top selling products",
+  "Are there any low stock items?",
+  "What is my overall ROAS?",
 ];
 
 export function AIAssistant() {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
-  const [messages, setMessages] = useState<Array<{ type: "user" | "ai"; text: string }>>([
+  const [isLoading, setIsLoading] = useState(false);
+  const [contextData, setContextData] = useState<any>(null);
+  
+  const [messages, setMessages] = useState<Array<{ type: "user" | "ai" | "system"; text: string }>>([
     {
       type: "ai",
-      text: "👋 Hi! I'm your AI assistant. I can help you analyze your data, answer questions about your business, and provide insights. Try asking me something!",
+      text: "👋 Hi! I'm your Brew Boulevard AI Business Analyst. I've analyzed your latest dashboard metrics. What would you like to know about your revenue, inventory, or ad performance?",
     },
   ]);
   const [inputValue, setInputValue] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const handleQuestionClick = (question: string) => {
-    const response = aiResponses.find((r) => r.question === question);
-    
-    setMessages((prev) => [
-      ...prev,
-      { type: "user", text: question },
-      { type: "ai", text: response?.answer || "Let me analyze that for you..." },
-    ]);
+  // Fetch real business context when opened
+  useEffect(() => {
+    if (isOpen && !contextData) {
+      loadContext();
+    }
+  }, [isOpen]);
+
+  // Auto-scroll to bottom of messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const loadContext = async () => {
+    try {
+      const sellerId = await ensureSeller();
+      // Fetch high-level dashboard summary to give the AI context
+      const dashboard = await apiClient.get(`/analytics/dashboard/summary?seller_id=${sellerId}`);
+      setContextData(dashboard);
+    } catch (err) {
+      console.error("Failed to load AI context:", err);
+    }
   };
 
-  const handleSend = () => {
-    if (!inputValue.trim()) return;
+  const callGroqAPI = async (userMessage: string, chatHistory: any[]) => {
+    const sellerId = await ensureSeller();
+    const payload = {
+      message: userMessage,
+      history: chatHistory.filter(m => m.type !== 'system'),
+      context: contextData || {}
+    };
 
-    setMessages((prev) => [
-      ...prev,
-      { type: "user", text: inputValue },
-      {
-        type: "ai",
-        text: "I'm analyzing your request. This is a demo response. In a production environment, I would provide detailed insights based on your actual data.",
-      },
-    ]);
+    const response = await apiClient.post(`/ai/chat?seller_id=${sellerId}`, payload);
+    return response.reply;
+  };
+
+  const handleSend = async (text: string = inputValue) => {
+    if (!text.trim() || isLoading) return;
+
+    const userMsg = text.trim();
     setInputValue("");
+    
+    // Add user message immediately
+    setMessages((prev) => [...prev, { type: "user", text: userMsg }]);
+    setIsLoading(true);
+
+    try {
+      const aiResponse = await callGroqAPI(userMsg, messages);
+      setMessages((prev) => [...prev, { type: "ai", text: aiResponse }]);
+    } catch (error) {
+      console.error(error);
+      setMessages((prev) => [...prev, { 
+        type: "system", 
+        text: "Sorry, I encountered an error connecting to the intelligence engine. Please try again." 
+      }]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (!isOpen) {
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-br from-purple-600 to-blue-600 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center group z-50"
+        className="fixed bottom-6 right-6 w-14 h-14 bg-gradient-to-br from-purple-600 to-indigo-600 rounded-full shadow-[0_0_20px_rgba(147,51,234,0.4)] hover:shadow-[0_0_30px_rgba(147,51,234,0.6)] transition-all flex items-center justify-center group z-50 border border-purple-400/30"
       >
         <Sparkles className="w-6 h-6 text-white group-hover:scale-110 transition-transform" />
-        <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></span>
+        <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-[#0a0a1a]"></span>
       </button>
     );
   }
 
   return (
     <div
-      className={`fixed bottom-6 right-6 bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col z-50 transition-all ${
-        isMinimized ? "w-80 h-16" : "w-96 h-[600px]"
+      className={`fixed bottom-6 right-6 bg-[#0a0a1a]/95 backdrop-blur-xl rounded-2xl shadow-[0_0_40px_rgba(0,0,0,0.5)] border border-purple-500/20 flex flex-col z-50 transition-all duration-300 ${
+        isMinimized ? "w-80 h-[72px]" : "w-96 h-[600px]"
       }`}
     >
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200">
+      <div className="flex items-center justify-between p-4 border-b border-white/10 bg-white/5 rounded-t-2xl">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-gradient-to-br from-purple-600 to-blue-600 rounded-full flex items-center justify-center">
-            <Sparkles className="w-4 h-4 text-white" />
+          <div className="w-10 h-10 bg-gradient-to-br from-purple-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-inner border border-white/10">
+            <Sparkles className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h3 className="font-semibold text-gray-900">AI Assistant</h3>
-            <p className="text-xs text-green-600">● Online</p>
+            <h3 className="font-bold text-white leading-tight">AI Strategist</h3>
+            <p className="text-[10px] text-emerald-400 font-mono tracking-wider flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> ONLINE
+            </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <button
             onClick={() => setIsMinimized(!isMinimized)}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/60 hover:text-white"
           >
-            {isMinimized ? (
-              <Maximize2 className="w-4 h-4 text-gray-600" />
-            ) : (
-              <Minimize2 className="w-4 h-4 text-gray-600" />
-            )}
+            {isMinimized ? <Maximize2 className="w-4 h-4" /> : <Minimize2 className="w-4 h-4" />}
           </button>
           <button
             onClick={() => setIsOpen(false)}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/60 hover:text-white"
           >
-            <X className="w-4 h-4 text-gray-600" />
+            <X className="w-4 h-4" />
           </button>
         </div>
       </div>
 
       {!isMinimized && (
         <>
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {/* Messages Area */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-purple-500/20 scrollbar-track-transparent">
             {messages.map((message, index) => (
               <div
                 key={index}
@@ -123,48 +142,65 @@ export function AIAssistant() {
                 <div
                   className={`max-w-[85%] rounded-2xl px-4 py-3 ${
                     message.type === "user"
-                      ? "bg-purple-600 text-white"
-                      : "bg-gray-100 text-gray-900"
+                      ? "bg-purple-600 text-white rounded-tr-sm"
+                      : message.type === "system"
+                      ? "bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs"
+                      : "bg-white/10 text-gray-100 border border-white/5 rounded-tl-sm"
                   }`}
                 >
-                  <p className="text-sm">{message.text}</p>
+                  <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.text}</p>
                 </div>
               </div>
             ))}
-
-            {/* Quick Questions */}
-            {messages.length === 1 && (
-              <div className="space-y-2">
-                <p className="text-xs text-gray-600 px-2">Quick questions:</p>
-                {sampleQuestions.map((question, index) => (
-                  <button
-                    key={index}
-                    onClick={() => handleQuestionClick(question)}
-                    className="w-full text-left px-4 py-3 bg-purple-50 hover:bg-purple-100 rounded-xl text-sm text-purple-700 transition-colors"
-                  >
-                    {question}
-                  </button>
-                ))}
+            
+            {isLoading && (
+              <div className="flex justify-start">
+                <div className="max-w-[85%] rounded-2xl rounded-tl-sm px-4 py-3 bg-white/5 border border-white/5 flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 text-purple-400 animate-spin" />
+                  <span className="text-sm text-purple-400/70">Analyzing data...</span>
+                </div>
               </div>
             )}
+
+            {/* Quick Questions (only show at start) */}
+            {messages.length === 1 && !isLoading && (
+              <div className="space-y-2 mt-6">
+                <p className="text-[10px] uppercase tracking-wider font-bold text-white/40 px-2">Suggested queries</p>
+                <div className="flex flex-col gap-2">
+                  {sampleQuestions.map((question, index) => (
+                    <button
+                      key={index}
+                      onClick={() => handleSend(question)}
+                      className="w-full text-left px-4 py-2.5 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 hover:border-purple-500/40 rounded-xl text-sm text-purple-300 transition-all duration-200"
+                    >
+                      {question}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            <div ref={messagesEndRef} />
           </div>
 
-          {/* Input */}
-          <div className="p-4 border-t border-gray-200">
+          {/* Input Area */}
+          <div className="p-4 border-t border-white/10 bg-white/5 rounded-b-2xl">
             <div className="flex items-center gap-2">
               <input
                 type="text"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyPress={(e) => e.key === "Enter" && handleSend()}
-                placeholder="Ask me anything..."
-                className="flex-1 px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all"
+                disabled={isLoading}
+                placeholder={isLoading ? "Please wait..." : "Ask your business analyst..."}
+                className="flex-1 px-4 py-3 bg-[#0a0a1a] border border-white/10 rounded-xl text-sm text-white focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all disabled:opacity-50 placeholder:text-white/30"
               />
               <button
-                onClick={handleSend}
-                className="p-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors"
+                onClick={() => handleSend()}
+                disabled={isLoading || !inputValue.trim()}
+                className="p-3 bg-purple-600 text-white rounded-xl hover:bg-purple-500 transition-colors disabled:opacity-50 disabled:hover:bg-purple-600 shadow-lg"
               >
-                <Send className="w-5 h-5" />
+                <Send className="w-5 h-5 ml-0.5" />
               </button>
             </div>
           </div>

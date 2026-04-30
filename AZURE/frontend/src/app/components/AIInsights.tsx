@@ -1,43 +1,120 @@
-import { Sparkles, TrendingUp, AlertCircle, Lightbulb } from "lucide-react";
-
-const insights = [
-  {
-    icon: TrendingUp,
-    title: "Revenue Growth Opportunity",
-    description:
-      "Amazon sales are up 23% this month. Consider increasing inventory for top-performing products.",
-    type: "success" as const,
-  },
-  {
-    icon: AlertCircle,
-    title: "Inventory Alert",
-    description:
-      "24 products are out of stock. Restock popular items to avoid lost sales.",
-    type: "warning" as const,
-  },
-  {
-    icon: Lightbulb,
-    title: "Optimization Tip",
-    description:
-      "Return rate for 'Electronics' category is 7.8%. Review product descriptions and images to reduce returns.",
-    type: "info" as const,
-  },
-];
+import { Sparkles, TrendingUp, AlertCircle, Lightbulb, RefreshCw, Zap, Clock } from "lucide-react";
+import { useState, useEffect } from "react";
+import { aiApiClient, ensureSeller } from "../services/api";
 
 export function AIInsights() {
+  const [insights, setInsights] = useState<any[]>([]);
+  const [quickWins, setQuickWins] = useState<string[]>([]);
+  const [summary, setSummary] = useState<string>("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchInsights() {
+      try {
+        const sellerId = await ensureSeller();
+        const today = new Date();
+        const lastMonth = new Date();
+        lastMonth.setDate(today.getDate() - 30);
+        
+        const requestBody = {
+          seller_id: sellerId,
+          time_window_start: lastMonth.toISOString().split('T')[0],
+          time_window_end: today.toISOString().split('T')[0],
+          snapshot_data: {}
+        };
+
+        const response = await aiApiClient.post("/api/v1/simulate", requestBody);
+        
+        if (response.status === "success" && response.executive_plan) {
+          const plan = response.executive_plan;
+          setSummary(plan.primary_problem_statement);
+          setQuickWins(plan.quick_wins || []);
+          
+          // Map backend actions to UI insight format
+          const mappedInsights = plan.ranked_actions.map((action: any, index: number) => {
+            let type = "info";
+            let icon = Lightbulb;
+            
+            if (action.risk_level?.toLowerCase() === "high" || action.timeframe === "Immediate") {
+              type = "warning";
+              icon = AlertCircle;
+            } else if (action.estimated_impact_percentage > 5 || action.timeframe === "This Week") {
+              type = "success";
+              icon = TrendingUp;
+            }
+
+            return {
+              icon: icon,
+              title: action.action_name,
+              reason: action.reason || "",
+              strategy: action.strategy || "",
+              description: action.description,
+              type: type as "success" | "warning" | "info",
+              impact: action.financial_impact_monthly,
+              timeframe: action.timeframe || "This Month"
+            };
+          });
+          
+          setInsights(mappedInsights.slice(0, 4)); // Show top 4 actions
+        }
+      } catch (error) {
+        console.error("Error fetching AI insights:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    
+    fetchInsights();
+  }, []);
   return (
-    <div className="bg-white rounded-2xl p-6 shadow-sm">
-      <div className="flex items-center gap-2 mb-6">
+    <div className="bg-white rounded-2xl p-6 shadow-sm relative min-h-[400px]">
+      {loading && (
+        <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center rounded-2xl">
+          <div className="relative">
+            <div className="absolute inset-0 rounded-full blur-xl bg-purple-500/30 animate-pulse"></div>
+            <Sparkles className="w-12 h-12 text-purple-600 animate-bounce relative z-10" />
+          </div>
+          <p className="mt-4 font-medium text-gray-800">Generating AI Strategy...</p>
+          <p className="text-xs text-gray-500 mt-1 max-w-[250px] text-center">
+            Our multi-agent system is analyzing your revenue, operations, and marketing data.
+          </p>
+        </div>
+      )}
+      <div className="flex items-center gap-2 mb-4">
         <div className="p-2 bg-gradient-to-br from-purple-500 to-blue-500 rounded-lg">
           <Sparkles className="w-5 h-5 text-white" />
         </div>
         <div>
-          <h3 className="text-lg font-semibold text-gray-900">AI Insights</h3>
+          <h3 className="text-lg font-semibold text-gray-900">Multi-Agent AI Insights</h3>
           <p className="text-sm text-gray-600">
-            Personalized recommendations for your business
+            Personalized strategic recommendations
           </p>
         </div>
       </div>
+      
+      {summary && (
+        <div className="mb-4 p-3 bg-purple-50/50 rounded-lg border border-purple-100 text-sm text-gray-800 italic">
+          "{summary}"
+        </div>
+      )}
+      
+      {/* Quick Wins Section */}
+      {quickWins.length > 0 && (
+        <div className="mb-4">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Zap className="w-4 h-4 text-amber-500" />
+            <span className="text-sm font-semibold text-gray-900">Quick Wins (Do Today)</span>
+          </div>
+          <div className="space-y-1.5">
+            {quickWins.map((win, i) => (
+              <div key={i} className="flex items-start gap-2 text-sm text-gray-700 bg-amber-50 rounded-lg px-3 py-2 border border-amber-100">
+                <span className="text-amber-600 font-bold mt-0.5">⚡</span>
+                <span>{win}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="space-y-4">
         {insights.map((insight, index) => {
@@ -65,12 +142,34 @@ export function AIInsights() {
                   <Icon className="w-5 h-5" />
                 </div>
                 <div className="flex-1">
-                  <h4 className="font-medium text-gray-900 mb-1">
+                  <h4 className="font-medium text-gray-900 mb-1 flex items-center gap-2">
                     {insight.title}
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                      insight.timeframe === 'Immediate' ? 'bg-red-100 text-red-700' :
+                      insight.timeframe === 'This Week' ? 'bg-amber-100 text-amber-700' :
+                      'bg-blue-100 text-blue-700'
+                    }`}>
+                      <Clock className="w-2.5 h-2.5 inline mr-0.5" />{insight.timeframe}
+                    </span>
                   </h4>
+                  {insight.reason && (
+                    <p className="text-xs text-gray-500 mb-1">
+                      <span className="font-semibold">Why:</span> {insight.reason}
+                    </p>
+                  )}
                   <p className="text-sm text-gray-700">
                     {insight.description}
                   </p>
+                  {insight.strategy && (
+                    <p className="text-xs text-gray-600 mt-1">
+                      <span className="font-semibold">How:</span> {insight.strategy}
+                    </p>
+                  )}
+                  {insight.impact > 0 && (
+                    <p className="text-xs font-semibold mt-2 text-gray-600">
+                      Estimated Monthly Impact: <span className="text-green-600">₹{insight.impact.toLocaleString()}</span>
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

@@ -8,6 +8,7 @@ import {
   BarChart3,
   HelpCircle,
   Database,
+  Brain,
 } from "lucide-react";
 import { NavLink } from "react-router";
 
@@ -19,6 +20,7 @@ const navItems = [
   { icon: TrendingUp, label: "Revenue", path: "/revenue" },
   { icon: Users, label: "Customers", path: "/customers" },
   { icon: Database, label: "Data Import", path: "/import" },
+  { icon: Brain, label: "AI Intelligence", path: "/ai/intelligence" },
 ];
 
 const bottomItems = [

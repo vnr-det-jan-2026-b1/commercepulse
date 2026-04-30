@@ -12,6 +12,8 @@ import { NotificationsPage } from "./pages/NotificationsPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { HelpPage } from "./pages/HelpPage";
 import { DataImportPage } from "./pages/DataImportPage";
+import { AIIntelligencePage } from "./pages/AIIntelligencePage";
+import { AIProductAnalysisPage } from "./pages/AIProductAnalysisPage";
 
 export const router = createBrowserRouter([
   {
@@ -25,6 +27,8 @@ export const router = createBrowserRouter([
       { path: "revenue", Component: RevenuePage },
       { path: "customers", Component: CustomersPage },
       { path: "import", Component: DataImportPage },
+      { path: "ai/intelligence", Component: AIIntelligencePage },
+      { path: "ai/products/:id", Component: AIProductAnalysisPage },
       { path: "products/:id", Component: ProductDetailPage },
       { path: "settings", Component: SettingsPage },
       { path: "notifications", Component: NotificationsPage },

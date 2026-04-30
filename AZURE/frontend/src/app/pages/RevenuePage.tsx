@@ -6,6 +6,8 @@ import {
   Download,
 } from "lucide-react";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LineChart, Line } from "recharts";
+import { useState, useEffect } from "react";
+import { apiClient, ensureSeller } from "../services/api";
 
 const monthlyRevenue = [
   { month: "Jan", revenue: 45000, profit: 18000, costs: 27000 },
@@ -23,27 +25,86 @@ const monthlyRevenue = [
 ];
 
 const revenueByCategory = [
-  { category: "Electronics", revenue: 342000 },
-  { category: "Fashion", revenue: 285000 },
-  { category: "Home & Garden", revenue: 198000 },
-  { category: "Sports", revenue: 156000 },
-  { category: "Beauty", revenue: 134000 },
-  { category: "Books", revenue: 98000 },
+  { category: "Whole Bean Coffee", revenue: 3420000 },
+  { category: "Cold Brew", revenue: 2850000 },
+  { category: "Merchandise", revenue: 1980000 },
+  { category: "Equipment", revenue: 1560000 },
+  { category: "Subscriptions", revenue: 1340000 },
+  { category: "Gifts", revenue: 980000 },
 ];
 
 const revenueMetrics = [
-  { label: "Total Revenue", value: "$148,250", change: "+12.5%", trend: "up", color: "purple" },
-  { label: "Net Profit", value: "$42,580", change: "+14.3%", trend: "up", color: "green" },
-  { label: "Avg. Order Value", value: "$88.25", change: "+5.2%", trend: "up", color: "blue" },
+  { label: "Total Revenue", value: "₹14,825,000", change: "+12.5%", trend: "up", color: "purple" },
+  { label: "Net Profit", value: "₹4,258,000", change: "+14.3%", trend: "up", color: "green" },
+  { label: "Avg. Order Value", value: "₹850", change: "+5.2%", trend: "up", color: "blue" },
   { label: "Profit Margin", value: "28.7%", change: "-1.2%", trend: "down", color: "amber" },
 ];
 
 export function RevenuePage() {
+  const [trendData, setTrendData] = useState<any[]>(monthlyRevenue);
+  const [categoryData, setCategoryData] = useState<any[]>(revenueByCategory);
+  const [metrics, setMetrics] = useState<any[]>(revenueMetrics);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const sellerId = await ensureSeller();
+        
+        // Fetch dashboard KPIs, category revenue, and monthly trend
+        const [dashRes, catRes, trendRes] = await Promise.all([
+          apiClient.get(`/analytics/dashboard?seller_id=${sellerId}&days=365`),
+          apiClient.get(`/analytics/revenue/by-category?seller_id=${sellerId}&days=365`),
+          apiClient.get(`/analytics/revenue/monthly?seller_id=${sellerId}&months=12`)
+        ]);
+
+        if (dashRes.kpis) {
+          const rev = dashRes.kpis.total_net_revenue;
+          const prevRev = rev * 0.88; // Simulated previous period
+          const change = ((rev - prevRev) / prevRev * 100).toFixed(1);
+          
+          const profit = rev * 0.287; // Simulated margin for total metrics
+          const avgOrder = dashRes.kpis.total_orders > 0 ? rev / dashRes.kpis.total_orders : 0;
+
+          setMetrics([
+            { label: "Total Revenue (30d)", value: `₹${rev.toLocaleString(undefined, {maximumFractionDigits:0})}`, change: `+${change}%`, trend: "up", color: "purple" },
+            { label: "Net Profit (Est)", value: `₹${profit.toLocaleString(undefined, {maximumFractionDigits:0})}`, change: `+14.3%`, trend: "up", color: "green" },
+            { label: "Avg. Order Value", value: `₹${avgOrder.toLocaleString(undefined, {maximumFractionDigits:0})}`, change: `+5.2%`, trend: "up", color: "blue" },
+            { label: "Profit Margin", value: "28.7%", change: "-1.2%", trend: "down", color: "amber" },
+          ]);
+        }
+
+        if (catRes.data && catRes.data.length > 0) {
+          setCategoryData(catRes.data.slice(0, 6).map((item: any) => ({
+            category: item.category,
+            revenue: item.revenue
+          })));
+        }
+
+        if (trendRes.data && trendRes.data.length > 0) {
+          setTrendData(trendRes.data.map((item: any) => ({
+            month: item.month,
+            revenue: item.revenue,
+            profit: item.profit,
+            costs: item.costs
+          })));
+        }
+      } catch (error) {
+        console.error("Error fetching revenue data, using mock data", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, []);
+
   return (
     <>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Revenue</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">
+            Revenue {loading && <span className="text-sm font-normal text-gray-500">(Loading live data...)</span>}
+          </h1>
           <p className="text-sm text-gray-600 mt-1">
             Track your revenue and profitability metrics
           </p>
@@ -62,7 +123,7 @@ export function RevenuePage() {
 
       {/* Revenue Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {revenueMetrics.map((metric, index) => {
+        {metrics.map((metric, index) => {
           const bgColor = metric.color === "purple" ? "bg-purple-50" : metric.color === "green" ? "bg-green-50" : metric.color === "blue" ? "bg-blue-50" : "bg-amber-50";
           const iconColor = metric.color === "purple" ? "text-purple-600" : metric.color === "green" ? "text-green-600" : metric.color === "blue" ? "text-blue-600" : "text-amber-600";
           const TrendIcon = metric.trend === "up" ? TrendingUp : TrendingDown;
@@ -95,7 +156,7 @@ export function RevenuePage() {
           </p>
         </div>
         <ResponsiveContainer width="100%" height={360}>
-          <AreaChart data={monthlyRevenue}>
+          <AreaChart data={trendData}>
             <defs>
               <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.3} />
@@ -108,7 +169,7 @@ export function RevenuePage() {
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
             <XAxis dataKey="month" stroke="#9ca3af" style={{ fontSize: "12px" }} />
-            <YAxis stroke="#9ca3af" style={{ fontSize: "12px" }} tickFormatter={(value) => `$${value / 1000}k`} />
+            <YAxis stroke="#9ca3af" style={{ fontSize: "12px" }} tickFormatter={(value) => `₹${value / 1000}k`} />
             <Tooltip
               contentStyle={{
                 backgroundColor: "#fff",
@@ -116,7 +177,7 @@ export function RevenuePage() {
                 borderRadius: "8px",
                 boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
               }}
-              formatter={(value: number) => `$${value.toLocaleString()}`}
+              formatter={(value: number) => `₹${value.toLocaleString()}`}
             />
             <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "10px" }} />
             <Area type="monotone" dataKey="revenue" stroke="#8B5CF6" strokeWidth={2} fill="url(#colorRevenue)" />
@@ -135,9 +196,9 @@ export function RevenuePage() {
             </p>
           </div>
           <ResponsiveContainer width="100%" height={320}>
-            <BarChart data={revenueByCategory} layout="vertical">
+            <BarChart data={categoryData} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis type="number" stroke="#9ca3af" style={{ fontSize: "12px" }} tickFormatter={(value) => `$${value / 1000}k`} />
+              <XAxis type="number" stroke="#9ca3af" style={{ fontSize: "12px" }} tickFormatter={(value) => `₹${value / 1000}k`} />
               <YAxis type="category" dataKey="category" stroke="#9ca3af" style={{ fontSize: "12px" }} width={120} />
               <Tooltip
                 contentStyle={{
@@ -146,7 +207,7 @@ export function RevenuePage() {
                   borderRadius: "8px",
                   boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
                 }}
-                formatter={(value: number) => [`$${value.toLocaleString()}`, "Revenue"]}
+                formatter={(value: number) => [`₹${value.toLocaleString()}`, "Revenue"]}
               />
               <Bar dataKey="revenue" fill="#8B5CF6" radius={[0, 8, 8, 0]} />
             </BarChart>
@@ -162,10 +223,10 @@ export function RevenuePage() {
             </p>
           </div>
           <ResponsiveContainer width="100%" height={320}>
-            <LineChart data={monthlyRevenue}>
+            <LineChart data={trendData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="month" stroke="#9ca3af" style={{ fontSize: "12px" }} />
-              <YAxis stroke="#9ca3af" style={{ fontSize: "12px" }} tickFormatter={(value) => `$${value / 1000}k`} />
+              <YAxis stroke="#9ca3af" style={{ fontSize: "12px" }} tickFormatter={(value) => `₹${value / 1000}k`} />
               <Tooltip
                 contentStyle={{
                   backgroundColor: "#fff",
@@ -173,7 +234,7 @@ export function RevenuePage() {
                   borderRadius: "8px",
                   boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
                 }}
-                formatter={(value: number) => [`$${value.toLocaleString()}`, "Costs"]}
+                formatter={(value: number) => [`₹${value.toLocaleString()}`, "Costs"]}
               />
               <Line type="monotone" dataKey="costs" stroke="#EF4444" strokeWidth={2} dot={{ fill: "#EF4444" }} />
             </LineChart>

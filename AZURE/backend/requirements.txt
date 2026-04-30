@@ -7,7 +7,7 @@ python-multipart==0.0.9
 sqlalchemy[asyncio]==2.0.28
 asyncpg==0.29.0
 psycopg2-binary==2.9.9
-pgvector==0.2.5
+pgvector
 
 # Excel ingestion
 pandas==2.2.1
@@ -32,7 +32,7 @@ python-dotenv==1.0.1
 orjson==3.9.15
 
 # HTTP Client
-httpx==0.27.0
+httpx
 
 # Caching
 fastapi-cache2[redis]==0.2.1

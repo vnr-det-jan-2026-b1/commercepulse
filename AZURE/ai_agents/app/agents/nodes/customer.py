@@ -1,44 +1,117 @@
+"""
+Customer & Market Intelligence Agent — Brand Strategist Persona.
+Analyzes channel performance, product-market fit, category concentration,
+and cancellation patterns using REAL data from the Orchestrator-enriched snapshot.
+"""
 import os
+import json
 from langchain_groq import ChatGroq
 from app.agents.state import SystemState
 from app.agents.schemas import MarketInsights
 
+
 def run_customer_agent(state: SystemState) -> dict:
     """
-    Brand Strategist Persona.
-    Uses vector similarity (from Supabase/pgvector) to detect sentiment drift and competitor shocks.
+    Brand Strategist Persona — Channel & Product Strategy.
+    Examines marketplace performance differences, product-market fit gaps,
+    category concentration risks, and cancellation patterns.
     """
     from app.db.supabase_client import fetch_recent_context
-    print("🎯 [Customer Agent] Fetching recent context from Supabase/pgvector...")
-    
+    print("🎯 [Market Agent] Analyzing channel performance and product-market fit...")
+
     seller_id = state.get("seller_id")
-    recent_context = fetch_recent_context(seller_id, limit=5)
-    
+    snapshot = state.get("snapshot_data", {})
+
+    # Extract real data (handle both global and per-product schemas)
+    if "pricing_by_marketplace" in snapshot:
+        # Product mode
+        dashboard_kpis = json.dumps(snapshot.get("profit_and_loss", {}), indent=2, default=str)
+        revenue_by_mp = json.dumps(snapshot.get("revenue_by_marketplace", []), indent=2, default=str)
+        pricing_margins = json.dumps(snapshot.get("pricing_by_marketplace", []), indent=2, default=str)
+        traffic_funnel = json.dumps(snapshot.get("advertising_performance", {}), indent=2, default=str)
+        inventory_status = json.dumps(snapshot.get("inventory_health", {}), indent=2, default=str)
+    else:
+        # Global mode
+        dashboard_kpis = json.dumps(snapshot.get("dashboard_kpis", {}), indent=2, default=str)
+        revenue_by_mp = json.dumps(snapshot.get("revenue_by_marketplace", []), indent=2, default=str)
+        pricing_margins = json.dumps(snapshot.get("pricing_margins", [])[:15], indent=2, default=str)
+        traffic_funnel = json.dumps(snapshot.get("traffic_funnel", [])[:15], indent=2, default=str)
+        inventory_status = json.dumps(snapshot.get("inventory_status", [])[:15], indent=2, default=str)
+
+    try:
+        recent_context = fetch_recent_context(seller_id, limit=3)
+    except Exception as e:
+        print(f"  ⚠️ Could not fetch Supabase context: {e}")
+        recent_context = "No historical context available (Supabase unavailable)."
+
     llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0.0)
     structured_llm = llm.with_structured_output(MarketInsights)
-    
-    snapshot = state.get("snapshot_data", {})
-    
+
     prompt = f"""
-    You are the Chief Brand Strategist and Customer Success Director for a major eCommerce company.
-    Your sole focus is managing public perception, identifying precise macro-economic or competitive shocks, and 
-    diagnosing the root causes of sentiment drift before they cause irreversible brand damage.
+You are the Chief Brand Strategist of "Brew Boulevard", a D2C specialty coffee brand selling on Amazon India, Flipkart, and their own Shopify store. The brand sells 15 coffee products across categories like Whole Bean, Ground, Cold Brew, Instant, and Drip Bags.
 
-    Here is the recent product context from our PostgreSQL vector database for Seller {seller_id}:
-    {recent_context}
+Your focus: Which products sell well WHERE, which channels are underperforming, and what's the strategy to grow the brand's total addressable market.
 
-    Analyze the following recent triggered event/snapshot for Seller {seller_id}:
-    {snapshot}
-    
-    DIRECTIONS:
-    1. Scan the textual and metric data for 'Sentiment Drift' (e.g., correlations between delivery delays and negative reviews).
-    2. Identify any external competitive shocks (e.g., aggressive price matching from rivals).
-    3. Output highly specific, mathematically grounded findings. Do NOT give generic advice like 'improve customer service'. Instead, pinpoint exactly which metric is failing and what specifically is driving the sentiment down.
-    """
-    
-    try:
-        result: MarketInsights = structured_llm.invoke(prompt)
-        return {"market_insights": result}
-    except Exception as e:
-        print(f"Error in Customer Agent: {e}")
-        return {"market_insights": None}
+=== OVERALL KPIs (Last {snapshot.get('period_days', 30)} days) ===
+{dashboard_kpis}
+
+=== REVENUE BY MARKETPLACE ===
+Shows gross_revenue, net_revenue, total_orders, delivered_orders, cancelled_orders, returned_orders, avg_order_value per marketplace:
+{revenue_by_mp}
+
+=== PRODUCT PRICING ACROSS MARKETPLACES ===
+Same products may have different prices and margins across channels:
+{pricing_margins}
+
+=== TRAFFIC & CONVERSION BY PRODUCT × MARKETPLACE ===
+Shows impressions, clicks, sessions, orders, CTR, conversion_rate, ad_spend, revenue_from_ads, ROAS per product per marketplace:
+{traffic_funnel}
+
+=== INVENTORY STATUS ===
+{inventory_status}
+
+=== HISTORICAL CONTEXT ===
+{recent_context}
+
+YOUR ANALYSIS MUST:
+
+1. **Channel Performance Gap**: Compare Amazon vs Flipkart vs Shopify on revenue, orders, avg_order_value, and cancellation rate. Identify the WEAKEST channel and diagnose WHY it's underperforming (is it traffic? conversion? pricing? inventory?).
+
+2. **Product-Market Fit Analysis**: Which products sell well on one marketplace but poorly on another? This indicates a listing quality, pricing, or visibility problem — not a product problem. Identify the specific SKUs and channels.
+
+3. **Category Concentration Risk**: Is 80%+ of revenue coming from just 2-3 SKUs? If so, that's a dangerous concentration. Identify the dependency and recommend diversification strategies.
+
+4. **Cancellation & Return Pattern**: From the KPIs, analyze cancellation_rate_pct. If it's above 5%, that's a red flag. Hypothesize the most likely cause based on the available data (pricing mismatch? delivery speed? product expectations?).
+
+5. **Growth Strategy**: For each underperforming channel or product, provide a SPECIFIC strategy:
+   - "Launch BB-CF-008 Cold Brew on Flipkart with a ₹50 introductory discount — this product does ₹X/month on Amazon but has zero presence on Flipkart"
+   - "Increase Shopify organic traffic by creating coffee brewing guide content — Shopify has the highest margin (0% commission) but lowest traffic"
+
+Reference actual product names, prices, and marketplace data from above. Do NOT give generic advice like "improve customer experience".
+
+IMPORTANT: Every action in recommended_actions MUST include ALL required fields: action_name, reason, strategy, description, estimated_impact_percentage, financial_impact_monthly, is_profit_safe, risk_level, difficulty, timeframe. Do NOT omit any field.
+"""
+
+    from app.utils import get_groq_api_key
+    llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0.0)
+
+    import time
+    max_retries = 3
+    for attempt in range(max_retries + 1):
+        try:
+            key = get_groq_api_key()
+            result: MarketInsights = llm.with_config({"api_key": key}).with_structured_output(MarketInsights).invoke(prompt)
+            return {"market_insights": result}
+        except Exception as e:
+            error_str = str(e)
+            if attempt < max_retries:
+                if "rate_limit_exceeded" in error_str or "429" in error_str:
+                    print(f"  ⚠️ [Customer Agent] Rate limit hit. Sleeping for 5s... (Attempt {attempt+1})")
+                    time.sleep(5)
+                    continue
+                if "tool_use_failed" in error_str or "missing properties" in error_str:
+                    print(f"  ⚠️ [Customer Agent] Retry {attempt + 1}/{max_retries} due to schema error...")
+                    time.sleep(2)
+                    continue
+            print(f"  ❌ [Customer Agent] Failed after {attempt + 1} attempts: {e}")
+            return {"market_insights": None}

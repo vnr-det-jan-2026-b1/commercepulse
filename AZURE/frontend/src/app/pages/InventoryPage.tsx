@@ -8,16 +8,18 @@ import {
   Clock,
   TrendingUp,
 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { apiClient, ensureSeller } from "../services/api";
 
 const inventoryItems = [
-  { id: "INV-001", name: "Wireless Headphones Pro", sku: "WHP-2024-01", category: "Electronics", stock: 245, minStock: 50, status: "In Stock", value: "$12,250", lastUpdated: "2 hours ago" },
-  { id: "INV-002", name: "Smart Watch Series 5", sku: "SWS-2024-02", category: "Electronics", stock: 89, minStock: 100, status: "Low Stock", value: "$17,800", lastUpdated: "5 hours ago" },
-  { id: "INV-003", name: "Leather Messenger Bag", sku: "LMB-2024-03", category: "Fashion", stock: 0, minStock: 30, status: "Out of Stock", value: "$0", lastUpdated: "1 day ago" },
-  { id: "INV-004", name: "Ergonomic Office Chair", sku: "EOC-2024-04", category: "Furniture", stock: 142, minStock: 20, status: "In Stock", value: "$42,600", lastUpdated: "3 hours ago" },
-  { id: "INV-005", name: "Ceramic Coffee Mug Set", sku: "CCM-2024-05", category: "Home", stock: 567, minStock: 100, status: "In Stock", value: "$8,505", lastUpdated: "1 hour ago" },
-  { id: "INV-006", name: "Yoga Mat Premium", sku: "YMP-2024-06", category: "Sports", stock: 38, minStock: 50, status: "Low Stock", value: "$1,140", lastUpdated: "4 hours ago" },
-  { id: "INV-007", name: "Bluetooth Speaker", sku: "BTS-2024-07", category: "Electronics", stock: 198, minStock: 75, status: "In Stock", value: "$9,900", lastUpdated: "6 hours ago" },
-  { id: "INV-008", name: "Running Shoes Elite", sku: "RSE-2024-08", category: "Sports", stock: 15, minStock: 40, status: "Low Stock", value: "$1,950", lastUpdated: "8 hours ago" },
+  { id: "INV-001", name: "Artisan Cold Brew Concentrate", sku: "BB-CF-001", category: "Cold Brew", stock: 245, minStock: 50, status: "In Stock", value: "₹85,500", lastUpdated: "2 hours ago" },
+  { id: "INV-002", name: "Single-Origin Espresso Roast", sku: "BB-CF-002", category: "Whole Bean", stock: 89, minStock: 100, status: "Low Stock", value: "₹44,055", lastUpdated: "5 hours ago" },
+  { id: "INV-003", name: "French Press Classic Blend", sku: "BB-CF-003", category: "Ground Coffee", stock: 0, minStock: 30, status: "Out of Stock", value: "₹0", lastUpdated: "1 day ago" },
+  { id: "INV-004", name: "Pour Over Drip Bags (Pack of 10)", sku: "BB-CF-004", category: "Drip Bags", stock: 142, minStock: 20, status: "In Stock", value: "₹42,600", lastUpdated: "3 hours ago" },
+  { id: "INV-005", name: "Vanilla Hazelnut Instant", sku: "BB-CF-005", category: "Instant Coffee", stock: 567, minStock: 100, status: "In Stock", value: "₹85,050", lastUpdated: "1 hour ago" },
+  { id: "INV-006", name: "Decaf Colombian Roast", sku: "BB-CF-006", category: "Whole Bean", stock: 38, minStock: 50, status: "Low Stock", value: "₹18,620", lastUpdated: "4 hours ago" },
+  { id: "INV-007", name: "Caramel Macchiato Blend", sku: "BB-CF-007", category: "Ground Coffee", stock: 198, minStock: 75, status: "In Stock", value: "₹89,100", lastUpdated: "6 hours ago" },
+  { id: "INV-008", name: "Cold Brew Maker Kit", sku: "BB-CF-008", category: "Equipment", stock: 15, minStock: 40, status: "Low Stock", value: "₹45,000", lastUpdated: "8 hours ago" },
 ];
 
 const stockSummary = [
@@ -28,11 +30,60 @@ const stockSummary = [
 ];
 
 export function InventoryPage() {
+  const [data, setData] = useState<any[]>(inventoryItems);
+  const [summary, setSummary] = useState(stockSummary);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const sellerId = await ensureSeller();
+        
+        // Fetch list and summary in parallel
+        const [statusRes, summaryRes] = await Promise.all([
+          apiClient.get(`/analytics/inventory/status?seller_id=${sellerId}`),
+          apiClient.get(`/analytics/inventory/summary?seller_id=${sellerId}`)
+        ]);
+
+        if (statusRes.data && statusRes.data.length > 0) {
+          setData(statusRes.data.map((item: any) => ({
+            id: `INV-${item.product_name.substring(0,3).toUpperCase()}`,
+            name: item.product_name,
+            sku: item.sku,
+            category: item.category,
+            stock: item.available_stock,
+            minStock: item.reorder_threshold,
+            status: item.available_stock === 0 ? "Out of Stock" : item.available_stock <= item.reorder_threshold ? "Low Stock" : "In Stock",
+            value: "₹ -", // Not in this endpoint directly
+            lastUpdated: new Date(item.snapshot_date).toLocaleDateString()
+          })));
+        }
+
+        if (summaryRes.summary && summaryRes.summary.total_items !== undefined) {
+          const s = summaryRes.summary;
+          setSummary([
+            { label: "Total Items", value: s.total_items.toLocaleString(), change: "Tracked products", icon: Package, color: "purple" },
+            { label: "In Stock", value: s.in_stock.toLocaleString(), change: `${Math.round(s.in_stock/s.total_items*100 || 0)}% of inventory`, icon: CheckCircle, color: "green" },
+            { label: "Low Stock", value: s.low_stock.toLocaleString(), change: `${Math.round(s.low_stock/s.total_items*100 || 0)}% of inventory`, icon: AlertTriangle, color: "amber" },
+            { label: "Out of Stock", value: s.out_of_stock.toLocaleString(), change: `${Math.round(s.out_of_stock/s.total_items*100 || 0)}% of inventory`, icon: Clock, color: "red" },
+          ]);
+        }
+      } catch (error) {
+        console.error("Error fetching inventory data, using mock data", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, []);
+
   return (
     <>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Inventory Management</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">
+            Inventory Management {loading && <span className="text-sm font-normal text-gray-500">(Loading live data...)</span>}
+          </h1>
           <p className="text-sm text-gray-600 mt-1">
             Track and manage your product inventory
           </p>
@@ -45,7 +96,7 @@ export function InventoryPage() {
 
       {/* Stock Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {stockSummary.map((item, index) => {
+        {summary.map((item, index) => {
           const Icon = item.icon;
           const bgColor = item.color === "purple" ? "bg-purple-50" : item.color === "green" ? "bg-green-50" : item.color === "amber" ? "bg-amber-50" : "bg-red-50";
           const iconColor = item.color === "purple" ? "text-purple-600" : item.color === "green" ? "text-green-600" : item.color === "amber" ? "text-amber-600" : "text-red-600";
@@ -96,7 +147,7 @@ export function InventoryPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {inventoryItems.map((item) => (
+              {data.map((item) => (
                 <tr key={item.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
@@ -139,7 +190,7 @@ export function InventoryPage() {
         </div>
 
         <div className="p-6 border-t border-gray-200 flex items-center justify-between">
-          <p className="text-sm text-gray-600">Showing 8 of 1,294 items</p>
+          <p className="text-sm text-gray-600">Showing {data.length} items</p>
           <div className="flex items-center gap-2">
             <button className="px-4 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50 transition-colors">
               Previous

@@ -77,6 +77,7 @@ async def test_simulate_ai_stream_endpoint(mock_stream_trigger):
         assert response.status_code == 200
         assert response.headers["content-type"] == "text/event-stream; charset=utf-8"
         
+        chunks = list(response.iter_bytes())
         assert len(chunks) == 3
         assert b'Hello' in chunks[0]
         assert b'World' in chunks[1]

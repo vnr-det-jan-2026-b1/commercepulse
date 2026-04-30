@@ -44,20 +44,36 @@ async def main():
     else:
         print("❌ Groq API Key NOT configured in environment.")
 
-    # 4. Test AI Agents API (Assuming it runs on port 8001 locally if not specified)
+    # 4. Test AI Agents API
     ai_url = settings.AI_AGENTS_URL
-    print(f"\n[4] Testing AI Agents API Connection ({ai_url}/docs)")
+    print(f"\n[4] Testing AI Agents API Connection ({ai_url}/health)")
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"{ai_url}/docs")
+            resp = await client.get(f"{ai_url}/docs") # AI Agents doesn't have /health yet, use /docs
             if resp.status_code == 200:
                 print("✅ AI Agents API Success! Accessible.")
             else:
                 print(f"⚠️ AI Agents API returned status: {resp.status_code}")
     except httpx.ConnectError:
-        print("❌ AI Agents API Failed: Connection Refused. Is the AI server running on port 8001?")
+        print(f"❌ AI Agents API Failed: Connection Refused (port 8001).")
     except Exception as e:
         print(f"❌ AI Agents API Failed: {e}")
+
+    # 5. Test Main Ingestion API Health
+    main_url = "http://localhost:8000"
+    print(f"\n[5] Testing Main Ingestion API Health ({main_url}/health)")
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{main_url}/health")
+            if resp.status_code == 200:
+                data = resp.json()
+                print(f"✅ Main API Success! Status: {data.get('status')}, Celery: {data.get('celery')}")
+            else:
+                print(f"⚠️ Main API returned status: {resp.status_code}")
+    except httpx.ConnectError:
+        print(f"❌ Main API Failed: Connection Refused (port 8000).")
+    except Exception as e:
+        print(f"❌ Main API Failed: {e}")
 
 if __name__ == "__main__":
     asyncio.run(main())

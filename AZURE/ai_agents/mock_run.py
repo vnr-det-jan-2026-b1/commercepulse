@@ -26,7 +26,7 @@ def run_simulation():
     
     # Step 1: Mock State (The "Data Snapshot")
     initial_state: SystemState = {
-        "seller_id": "SLR-1094-APPLE",
+        "seller_id": "d3b07384-d990-4493-9c9c-567035467c64",
         "time_window_start": "2026-02-01",
         "time_window_end": "2026-02-15",
         "snapshot_data": {
@@ -50,10 +50,13 @@ def run_simulation():
                 "conversion_volume": "Dropping"
             }
         },
+        "product_id": None,
         "revenue_insights": None,
         "ops_insights": None,
         "market_insights": None,
-        "final_executive_plan": None
+        "marketing_insights": None,
+        "final_executive_plan": None,
+        "product_analysis": None
     }
 
     # Step 2: Execute Graph

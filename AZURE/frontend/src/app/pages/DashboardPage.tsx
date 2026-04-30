@@ -21,21 +21,44 @@ import { MarketplaceRevenueChart } from "../components/MarketplaceRevenueChart";
 import { AIInsights } from "../components/AIInsights";
 import { MiniAnalyticsCard } from "../components/MiniAnalyticsCard";
 import { Link } from "react-router";
+import { useState, useEffect } from "react";
+import { apiClient, ensureSeller } from "../services/api";
 
 const topProducts = [
-  { id: "1", name: "Wireless Headphones Pro", sales: 1247, revenue: "$62,335", trend: "+12%" },
-  { id: "2", name: "Smart Watch Series 5", sales: 892, revenue: "$44,600", trend: "+8%" },
-  { id: "3", name: "Bluetooth Speaker Elite", sales: 756, revenue: "$37,800", trend: "+15%" },
+  { id: "1", name: "Artisan Cold Brew Concentrate", sales: 1247, revenue: "₹62,335", trend: "+12%" },
+  { id: "2", name: "Single-Origin Espresso Roast", sales: 892, revenue: "₹44,600", trend: "+8%" },
+  { id: "3", name: "French Press Classic Blend", sales: 756, revenue: "₹37,800", trend: "+15%" },
 ];
 
 export function DashboardPage() {
+  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const sellerId = await ensureSeller();
+        const data = await apiClient.get(`/analytics/dashboard?seller_id=${sellerId}&days=365`);
+        setDashboardData(data);
+      } catch (error) {
+        console.error("Error fetching dashboard data:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, []);
+
+  // Format currency
+  const formatCurrency = (val: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(val);
+
   return (
     <>
       {/* Overview Section - KPI Cards */}
       <section className="mb-8">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold text-gray-900">
-            Overview
+            Overview {loading && <span className="text-sm font-normal text-gray-500">(Loading live data...)</span>}
           </h2>
           <Link 
             to="/import" 
@@ -48,8 +71,8 @@ export function DashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <KPICard
             title="Total Revenue"
-            value="$148,250"
-            change="+12.5% vs last month"
+            value={dashboardData ? formatCurrency(dashboardData.kpis.total_net_revenue) : "₹0"}
+            change="vs last 30 days"
             changeType="positive"
             icon={DollarSign}
             iconColor="bg-gradient-to-br from-purple-500 to-purple-600"
@@ -57,45 +80,45 @@ export function DashboardPage() {
           />
           <KPICard
             title="Total Orders"
-            value="1,680"
-            change="+8.2% vs last month"
+            value={dashboardData ? dashboardData.kpis.total_orders.toLocaleString() : "0"}
+            change="vs last 30 days"
             changeType="positive"
             icon={ShoppingCart}
             iconColor="bg-gradient-to-br from-blue-500 to-blue-600"
             sparklineData={[1240, 1380, 1290, 1520, 1450, 1680, 1720, 1650, 1580, 1680, 1720, 1800]}
           />
           <KPICard
-            title="Growth Rate"
-            value="23.4%"
-            change="+5.1% vs last month"
-            changeType="positive"
+            title="Average ROAS"
+            value={dashboardData ? `${dashboardData.kpis.avg_roas.toFixed(1)}x` : "0.0x"}
+            change="Return on Ad Spend"
+            changeType={dashboardData && dashboardData.kpis.avg_roas >= 3 ? "positive" : "neutral"}
             icon={TrendingUp}
             iconColor="bg-gradient-to-br from-green-500 to-green-600"
             sparklineData={[15, 17, 18, 19, 20, 21, 22, 23, 22, 23, 24, 23]}
           />
           <KPICard
             title="Inventory Alerts"
-            value="24"
-            change="3 critical items"
-            changeType="negative"
+            value={dashboardData ? dashboardData.kpis.low_stock_products.toString() : "0"}
+            change="critical items"
+            changeType={dashboardData && dashboardData.kpis.low_stock_products > 0 ? "negative" : "positive"}
             icon={AlertTriangle}
             iconColor="bg-gradient-to-br from-amber-500 to-amber-600"
             sparklineData={[35, 32, 30, 28, 26, 25, 24, 26, 25, 24, 23, 24]}
           />
           <KPICard
-            title="Net Profit"
-            value="$42,580"
-            change="+14.3% vs last month"
-            changeType="positive"
+            title="Cancellation Rate"
+            value={dashboardData ? `${dashboardData.kpis.cancellation_rate_pct}%` : "0%"}
+            change="vs last 30 days"
+            changeType={dashboardData && dashboardData.kpis.cancellation_rate_pct < 5 ? "positive" : "negative"}
             icon={Wallet}
             iconColor="bg-gradient-to-br from-indigo-500 to-indigo-600"
             sparklineData={[25, 28, 30, 32, 35, 38, 40, 39, 41, 42, 43, 42]}
           />
           <KPICard
-            title="Returns"
-            value="125"
-            change="-2.1% vs last month"
-            changeType="positive"
+            title="RTO Rate"
+            value={dashboardData ? `${dashboardData.kpis.rto_rate_pct}%` : "0%"}
+            change="Returns to Origin"
+            changeType={dashboardData && dashboardData.kpis.rto_rate_pct < 5 ? "positive" : "negative"}
             icon={RotateCcw}
             iconColor="bg-gradient-to-br from-teal-500 to-teal-600"
             sparklineData={[87, 102, 95, 118, 108, 125, 130, 128, 127, 125, 122, 125]}
@@ -128,11 +151,11 @@ export function DashboardPage() {
           />
           <MiniAnalyticsCard
             title="Avg. Order Value"
-            value="$88.25"
-            change="+$5.50 from last week"
+            value="₹885.25"
+            change="+₹55.00 from last week"
             changeType="positive"
             icon={Activity}
-            data={[75, 78, 80, 82, 84, 85, 87, 88]}
+            data={[750, 780, 800, 820, 840, 850, 870, 885]}
             chartType="line"
           />
           <MiniAnalyticsCard

@@ -1,60 +1,117 @@
+"""
+Marketing & Growth Intelligence Agent — CMO Persona.
+Analyzes ad spend efficiency, ROAS, traffic quality, conversion funnels,
+and wasted budget using REAL data from the Orchestrator-enriched snapshot.
+"""
 import os
+import json
 from langchain_groq import ChatGroq
 from app.agents.state import SystemState
 from app.agents.schemas import MarketingInsights
-from app.db.supabase_client import fetch_recent_context
+
 
 def run_marketing_agent(state: SystemState) -> dict:
     """
-    CMO Persona (Chief Marketing Officer)
-    Focus: Ad spend, ROAS, traffic quality, conversion funnel drop-offs.
-    Action logic: Kill low ROAS campaigns, double down on high intent keywords.
+    CMO Persona — Ad Spend & Growth Optimizer.
+    Examines real traffic funnel data, ROAS per product, CTR patterns,
+    and conversion rates to kill wasted spend and double down on winners.
     """
-    print("📈 [Marketing Agent] Starting ROAS & Traffic analysis...")
-    
-    # Extract the payload the backend sent us
-    snapshot_data = state.get("snapshot_data", {})
-    seller_id = state.get("seller_id", "")
-    
-    # 1. Fetch live historical data from Supabase
-    try:
-        context_docs = fetch_recent_context(
-            seller_id=seller_id,
-            limit=3
-        )
-        recent_context_str = "\n".join([doc.page_content for doc in context_docs]) if context_docs else "No historical marketing data available in vector store."
-    except Exception as e:
-        print(f"Warning: Failed to fetch Supabase context in Marketing agent: {e}")
-        recent_context_str = "Error fetching historical context."
+    from app.db.supabase_client import fetch_recent_context
+    print("📣 [Marketing Agent] Analyzing ad spend, ROAS, and traffic quality...")
 
-    # 2. Initialize the fast Groq LLM
-    llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0.1)
-    
-    # Bind our Pydantic schema to force the LLM to output structured JSON
-    structured_llm = llm.with_structured_output(MarketingInsights)
-    
-    # 3. Build the prompt
-    prompt = f"""
-    You are the Chief Marketing Officer (CMO) of a rapidly scaling e-commerce brand.
-    Your focus is *strictly* on driving profitable traffic, maximizing ROAS (Return on Ad Spend), and eliminating wasted advertising budget.
-    
-    We have received a new business event / snapshot for Seller {seller_id}:
-    {snapshot_data}
-    
-    Here is the recent historical data for their top products from our database (pay attention to traffic, clicks, and ROAS):
-    {recent_context_str}
-    
-    Your Task:
-    Validate if the current ad campaigns are effective or if we are wasting money on traffic that bounces or doesn't convert.
-    Be extremely critical of any campaign with low ROAS. If a product is out of stock or overpriced compared to the market, recommend pulling the ad spend immediately.
-    
-    Output your analysis matching the required MarketingInsights schema. Ensure all 'wasted_ad_spend_monthly' estimates are realistic based on the provided inputs.
-    """
-    
-    # 4. Invoke LLM and return update for the State
+    seller_id = state.get("seller_id")
+    snapshot = state.get("snapshot_data", {})
+
+    # Extract real data (handle both global and per-product schemas)
+    if "advertising_performance" in snapshot:
+        # Product mode
+        dashboard_kpis = json.dumps(snapshot.get("profit_and_loss", {}), indent=2, default=str)
+        traffic_funnel = json.dumps(snapshot.get("advertising_performance", {}), indent=2, default=str)
+        revenue_by_mp = json.dumps(snapshot.get("revenue_by_marketplace", []), indent=2, default=str)
+        pricing_margins = json.dumps(snapshot.get("pricing_by_marketplace", []), indent=2, default=str)
+    else:
+        # Global mode
+        dashboard_kpis = json.dumps(snapshot.get("dashboard_kpis", {}), indent=2, default=str)
+        traffic_funnel = json.dumps(snapshot.get("traffic_funnel", []), indent=2, default=str)
+        revenue_by_mp = json.dumps(snapshot.get("revenue_by_marketplace", []), indent=2, default=str)
+        pricing_margins = json.dumps(snapshot.get("pricing_margins", [])[:10], indent=2, default=str)
+
     try:
-        result: MarketingInsights = structured_llm.invoke(prompt)
-        return {"marketing_insights": result}
+        recent_context = fetch_recent_context(seller_id, limit=3)
     except Exception as e:
-        print(f"Error in Marketing Agent: {e}")
-        return {"marketing_insights": None}
+        print(f"  ⚠️ Could not fetch Supabase context: {e}")
+        recent_context = "No historical context available (Supabase unavailable)."
+
+    llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0.1)
+    structured_llm = llm.with_structured_output(MarketingInsights)
+
+    prompt = f"""
+You are the Chief Marketing Officer (CMO) of "Brew Boulevard", a D2C specialty coffee brand in India. You manage ad spend across Amazon Sponsored Ads, Flipkart Ads, and Google/Meta ads for the Shopify store.
+
+Your ONLY goal: maximize Return on Ad Spend (ROAS) and eliminate every rupee of wasted advertising budget. You are data-obsessed and will not tolerate spending money on traffic that doesn't convert.
+
+=== OVERALL KPIs ===
+{dashboard_kpis}
+
+=== TRAFFIC FUNNEL DATA (Per Product × Per Marketplace) ===
+Each row shows: SKU, product_name, category, marketplace, total_impressions, total_clicks, total_sessions, total_orders, ctr_pct (Click-Through Rate), conversion_rate_pct, total_ad_spend, total_revenue_from_ads, roas (Return on Ad Spend)
+{traffic_funnel}
+
+=== REVENUE BY MARKETPLACE ===
+{revenue_by_mp}
+
+=== PRODUCT PRICING (for context on whether pricing kills conversion) ===
+{pricing_margins}
+
+=== HISTORICAL CONTEXT ===
+{recent_context}
+
+YOUR ANALYSIS MUST:
+
+1. **ROAS Audit — Kill the Losers**: Identify EVERY product × marketplace combination where ROAS < 2.0. For each:
+   - Calculate exact wasted spend: total_ad_spend - (total_revenue_from_ads)
+   - Recommend: KILL (pause immediately), REDUCE (cut budget 50%), or FIX (listing/pricing issue)
+   - Example: "BB-CF-010 on Flipkart: ₹8,500 ad spend → ₹2,100 revenue = ROAS 0.25. KILL this campaign immediately. Saving ₹8,500/month."
+
+2. **CTR Analysis — Listing Quality**: Products with high impressions but low CTR (<1.5%) have a listing problem (bad main image, weak title, or wrong pricing). Identify specific products and recommend what to fix.
+
+3. **Conversion Rate Analysis**: Products with decent CTR but low conversion_rate (<2%) indicate a product page problem (bad reviews, competitor is cheaper, out of stock). Cross-reference with pricing data to diagnose.
+
+4. **Budget Reallocation**: Take the saved budget from killed/reduced campaigns and recommend WHERE to reallocate it. Prioritize products with ROAS > 4.0 and room to scale (not maxed out on impressions).
+
+5. **Total Wasted Spend Calculation**: Sum up ALL wasted/inefficient ad spend across all products. This is your headline number. Break it down by marketplace.
+
+Every recommendation must include:
+- The exact product name and marketplace
+- Current spend and revenue numbers
+- What to do (kill/reduce/scale/fix)
+- Expected financial impact
+
+Do NOT give abstract marketing advice. Use the REAL numbers provided.
+
+IMPORTANT: Every action in recommended_actions MUST include ALL required fields: action_name, reason, strategy, description, estimated_impact_percentage, financial_impact_monthly, is_profit_safe, risk_level, difficulty, timeframe. Do NOT omit any field.
+"""
+
+    from app.utils import get_groq_api_key
+    llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0.0)
+
+    import time
+    max_retries = 3
+    for attempt in range(max_retries + 1):
+        try:
+            key = get_groq_api_key()
+            result: MarketingInsights = llm.with_config({"api_key": key}).with_structured_output(MarketingInsights).invoke(prompt)
+            return {"marketing_insights": result}
+        except Exception as e:
+            error_str = str(e)
+            if attempt < max_retries:
+                if "rate_limit_exceeded" in error_str or "429" in error_str:
+                    print(f"  ⚠️ [Marketing Agent] Rate limit hit. Sleeping for 5s... (Attempt {attempt+1})")
+                    time.sleep(5)
+                    continue
+                if "tool_use_failed" in error_str or "missing properties" in error_str:
+                    print(f"  ⚠️ [Marketing Agent] Retry {attempt + 1}/{max_retries} due to schema error...")
+                    time.sleep(2)
+                    continue
+            print(f"  ❌ [Marketing Agent] Failed after {attempt + 1} attempts: {e}")
+            return {"marketing_insights": None}

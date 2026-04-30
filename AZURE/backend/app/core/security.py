@@ -40,6 +40,12 @@ async def enforce_seller_scope(
       compatibility), but you should prefer always sending X-Seller-Id
       from the authenticated context on the frontend.
     """
+    # For form-based routes (e.g. /upload/full), seller_id comes via Form()
+    # and is invisible to this dependency. In that case seller_id is None,
+    # but x_seller_id is set from the header — just trust the header.
+    if seller_id is None:
+        return x_seller_id  # may also be None, which is fine (no scope)
+
     if x_seller_id is not None and x_seller_id != seller_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

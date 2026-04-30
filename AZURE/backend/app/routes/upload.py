@@ -1,8 +1,9 @@
-"""Upload routes — POST /upload/{domain}"""
+import io
+import logging
 from datetime import date
 from typing import Optional
-import logging
 
+import pandas as pd
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,30 +20,40 @@ ALLOWED_CONTENT_TYPES = {
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "application/vnd.ms-excel",
     "application/octet-stream",
+    "text/csv"
 }
 
 def _validate_excel(file: UploadFile):
-    if file.content_type not in ALLOWED_CONTENT_TYPES and not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(status_code=400, detail="Only .xlsx / .xls files are accepted.")
+    if file.content_type not in ALLOWED_CONTENT_TYPES and not file.filename.endswith((".xlsx", ".xls", ".csv")):
+        raise HTTPException(status_code=400, detail="Only .xlsx, .xls, and .csv files are accepted.")
 
 
-def _trigger_embed(seller_id: str, snap_date: date):
+async def _trigger_embed(seller_id: str, snap_date: date):
     """
     Fire-and-forget: enqueue the Celery embedding task.
-    Gracefully degrades if Redis is unavailable (logs warning, doesn't crash the upload).
+    If Redis/Celery is down, fall back to a local asyncio background task.
     """
+    import asyncio
+    from app.services.tasks import auto_embed, _run_embed
+    
     try:
-        from app.services.tasks import auto_embed
-        res = auto_embed.delay(seller_id, str(snap_date))
-        logger.info(
-            "[Upload] Enqueued auto_embed task_id=%s seller_id=%s date=%s",
-            res.id,
-            seller_id,
-            snap_date,
-        )
+        # 1. Try Celery (distributed)
+        auto_embed.delay(seller_id, str(snap_date))
+        logger.info("[Upload] Enqueued Celery auto_embed for %s", seller_id)
     except Exception as e:
-        logger.warning("[Upload] Could not enqueue embed task (Redis unavailable?): %s", e)
+        # 2. Fallback to local background task (asyncio)
+        logger.warning("[Upload] Redis/Celery unavailable, using local task fallback: %s", e)
+        # We wrap the async logic in a background task so we don't block the response
+        asyncio.create_task(_run_embed(seller_id, str(snap_date)))
+        logger.info("[Upload] Started local background _run_embed for %s", seller_id)
 
+
+def _parse_file_to_df(file: UploadFile, content: bytes) -> pd.DataFrame:
+    import io
+    import pandas as pd
+    if file.filename.endswith(".csv") or file.content_type == "text/csv":
+        return pd.read_csv(io.BytesIO(content))
+    return pd.read_excel(io.BytesIO(content), engine="openpyxl")
 
 # ── Orders ─────────────────────────────────────────────────────
 @router.post("/orders", summary="Upload Orders Excel sheet")
@@ -56,8 +67,9 @@ async def upload_orders(
     _validate_excel(file)
     snap_date = date.fromisoformat(snapshot_date) if snapshot_date else date.today()
     content = await file.read()
-    result  = await ingestion.ingest_orders(db, content, seller_id, snap_date)
-    _trigger_embed(seller_id, snap_date)   # ← async background embedding
+    df = _parse_file_to_df(file, content)
+    result  = await ingestion.ingest_orders(db, df, seller_id, snap_date)
+    await _trigger_embed(seller_id, snap_date)   # ← async background embedding
     return {"status": "ok", **result, "snapshot_date": str(snap_date), "embedding": "queued"}
 
 
@@ -73,8 +85,9 @@ async def upload_inventory(
     _validate_excel(file)
     snap_date = date.fromisoformat(snapshot_date) if snapshot_date else date.today()
     content = await file.read()
-    result  = await ingestion.ingest_inventory(db, content, seller_id, snap_date)
-    _trigger_embed(seller_id, snap_date)   # ← async background embedding
+    df = _parse_file_to_df(file, content)
+    result  = await ingestion.ingest_inventory(db, df, seller_id, snap_date)
+    await _trigger_embed(seller_id, snap_date)   # ← async background embedding
     return {"status": "ok", **result, "snapshot_date": str(snap_date), "embedding": "queued"}
 
 
@@ -90,8 +103,9 @@ async def upload_pricing(
     _validate_excel(file)
     snap_date = date.fromisoformat(snapshot_date) if snapshot_date else date.today()
     content = await file.read()
-    result  = await ingestion.ingest_pricing(db, content, seller_id, snap_date)
-    _trigger_embed(seller_id, snap_date)   # ← async background embedding
+    df = _parse_file_to_df(file, content)
+    result  = await ingestion.ingest_pricing(db, df, seller_id, snap_date)
+    await _trigger_embed(seller_id, snap_date)   # ← async background embedding
     return {"status": "ok", **result, "snapshot_date": str(snap_date), "embedding": "queued"}
 
 
@@ -107,8 +121,9 @@ async def upload_traffic(
     _validate_excel(file)
     snap_date = date.fromisoformat(snapshot_date) if snapshot_date else date.today()
     content = await file.read()
-    result  = await ingestion.ingest_traffic(db, content, seller_id, snap_date)
-    _trigger_embed(seller_id, snap_date)   # ← async background embedding
+    df = _parse_file_to_df(file, content)
+    result  = await ingestion.ingest_traffic(db, df, seller_id, snap_date)
+    await _trigger_embed(seller_id, snap_date)   # ← async background embedding
     return {"status": "ok", **result, "snapshot_date": str(snap_date), "embedding": "queued"}
 
 
@@ -124,8 +139,9 @@ async def upload_logistics(
     _validate_excel(file)
     snap_date = date.fromisoformat(snapshot_date) if snapshot_date else date.today()
     content = await file.read()
-    result  = await ingestion.ingest_logistics(db, content, seller_id, snap_date)
-    _trigger_embed(seller_id, snap_date)   # ← async background embedding
+    df = _parse_file_to_df(file, content)
+    result  = await ingestion.ingest_logistics(db, df, seller_id, snap_date)
+    await _trigger_embed(seller_id, snap_date)   # ← async background embedding
     return {"status": "ok", **result, "snapshot_date": str(snap_date), "embedding": "queued"}
 
 
@@ -150,9 +166,6 @@ async def upload_full(
     snap_date = date.fromisoformat(snapshot_date) if snapshot_date else date.today()
     content = await file.read()
 
-    xl = pd.ExcelFile(io.BytesIO(content), engine="openpyxl")
-    sheet_names_lower = {s.strip().lower(): s for s in xl.sheet_names}
-
     results = {}
     DOMAIN_MAP = {
         "orders":    ingestion.ingest_orders,
@@ -162,17 +175,66 @@ async def upload_full(
         "logistics": ingestion.ingest_logistics,
     }
 
-    for domain, fn in DOMAIN_MAP.items():
-        if domain in sheet_names_lower:
-            sheet_df = xl.parse(sheet_names_lower[domain])
-            buf = io.BytesIO()
-            sheet_df.to_excel(buf, index=False, engine="openpyxl")
-            results[domain] = await fn(db, buf.getvalue(), seller_id, snap_date)
+    try:
+        # If it's a CSV, it's just a single sheet.
+        if file.filename.endswith(".csv") or file.content_type == "text/csv":
+            try:
+                df = pd.read_csv(io.BytesIO(content))
+                
+                # Infer domain
+                cols = set(str(c).strip().lower() for c in df.columns)
+                inferred = "orders"
+                if "available stock" in cols or "available_stock" in cols or "stock" in cols:
+                    inferred = "inventory"
+                elif "cost price" in cols or "cost_price" in cols or "mrp" in cols:
+                    inferred = "pricing"
+                elif "impressions" in cols or "page views" in cols or "ad spend" in cols:
+                    inferred = "traffic"
+                elif "tracking id" in cols or "courier" in cols or "rto" in cols:
+                    inferred = "logistics"
+                    
+                results[inferred] = await DOMAIN_MAP[inferred](db, df, seller_id, snap_date)
+                
+            except Exception as e:
+                logger.error("[Upload] CSV processing failed: %s", e, exc_info=True)
+                raise HTTPException(400, f"Failed to read CSV: {e}")
+                
+        else:
+            # Excel file processing (avoid re-serializing to bytes)
+            xl = pd.ExcelFile(io.BytesIO(content), engine="openpyxl")
+            sheet_names_lower = {s.strip().lower(): s for s in xl.sheet_names}
+            found_any = False
+            
+            for domain, fn in DOMAIN_MAP.items():
+                if domain in sheet_names_lower:
+                    found_any = True
+                    sheet_df = xl.parse(sheet_names_lower[domain])
+                    results[domain] = await fn(db, sheet_df, seller_id, snap_date)
 
-    if not results:
-        raise HTTPException(400, "No recognizable sheets found. Expected: Orders, Inventory, Pricing, Traffic, Logistics")
+            if not found_any and len(xl.sheet_names) == 1:
+                sheet_df = xl.parse(xl.sheet_names[0])
+                cols = set(str(c).strip().lower() for c in sheet_df.columns)
+                
+                inferred = "orders"
+                if "available stock" in cols or "available_stock" in cols or "stock" in cols:
+                    inferred = "inventory"
+                elif "cost price" in cols or "cost_price" in cols or "mrp" in cols:
+                    inferred = "pricing"
+                elif "impressions" in cols or "page views" in cols or "ad spend" in cols:
+                    inferred = "traffic"
+                elif "tracking id" in cols or "courier" in cols or "rto" in cols:
+                    inferred = "logistics"
+                    
+                results[inferred] = await DOMAIN_MAP[inferred](db, sheet_df, seller_id, snap_date)
 
-    # Trigger one embed job for all domains processed
-    _trigger_embed(seller_id, snap_date)
+        if not results:
+            raise HTTPException(400, "No recognizable sheets found. Expected: Orders, Inventory, Pricing, Traffic, Logistics")
 
-    return {"status": "ok", "results": results, "snapshot_date": str(snap_date), "embedding": "queued"}
+        # Trigger one embed job for all domains processed
+        logger.info("[Upload] Finished multi-sheet processing, triggering embedding.")
+        await _trigger_embed(seller_id, snap_date)
+
+        return {"status": "ok", "results": results, "snapshot_date": str(snap_date), "embedding": "queued"}
+    except Exception as e:
+        logger.error("[Upload] Full upload failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
