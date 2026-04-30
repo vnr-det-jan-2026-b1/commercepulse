@@ -10,30 +10,28 @@ from app.services import analytics_queries as q
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
-# In-memory restock store: seller_id → { product_id: total_units_added }
-_restock_store: dict[str, dict[str, int]] = defaultdict(dict)
-
-# In-memory purchase store: seller_id → { product_id: total_units_purchased }
-# Immediately reflects purchases in stock without waiting for BigQuery streaming lag.
+# In-memory stores for immediate feedback (no BigQuery streaming lag).
+# BigQuery is the source of truth; these bridge the gap until it propagates.
+_restock_store:  dict[str, dict[str, int]] = defaultdict(dict)
 _purchase_store: dict[str, dict[str, int]] = defaultdict(dict)
 
 
-def _effective_stock(bq_stock: int, product_id: str, seller_id: str, max_stock: int = 10) -> int:
-    """Apply restock additions and purchase deductions to a BigQuery stock value."""
-    restock_adj  = _restock_store.get(seller_id, {}).get(product_id, 0)
-    purchase_adj = _purchase_store.get(seller_id, {}).get(product_id, 0)
-    return max(0, min(bq_stock + restock_adj - purchase_adj, max_stock))
+def _effective_stock(bq_stock: int, product_id: str, seller_id: str) -> int:
+    """BigQuery stock + in-memory restock additions - in-memory purchase deductions."""
+    restock  = _restock_store.get(seller_id, {}).get(product_id, 0)
+    purchase = _purchase_store.get(seller_id, {}).get(product_id, 0)
+    return max(0, bq_stock + restock - purchase)
 
 
 class RestockRequest(BaseModel):
-    seller_id: str
+    seller_id:  str
     product_id: str
-    quantity: int = Field(..., ge=1, le=10000)
+    quantity:   int = Field(..., ge=1, le=500)
 
 
 class PurchaseItem(BaseModel):
     product_id: str
-    quantity: int = Field(..., ge=1)
+    quantity:   int = Field(..., ge=1)
 
 
 class PurchaseRequest(BaseModel):
@@ -145,10 +143,9 @@ async def storefront_analytics(
     params = {"seller_id": seller_id, "days": days}
 
     if granularity == "hour":
-        hours_count = days * 24
         traffic = await bq.query(
             q.STOREFRONT_HOURLY_TRAFFIC_SQL,
-            {"seller_id": seller_id, "hours": hours_count},
+            {"seller_id": seller_id, "hours": days * 24},
         )
     else:
         traffic = await bq.query(q.STOREFRONT_DAILY_TRAFFIC_SQL, params)
@@ -172,21 +169,19 @@ async def product_stock(
     seller_id: str = Query(...),
     _scope:    str = Depends(enforce_seller_scope),
 ):
-    MAX_STOCK = 10
     rows = await bq.query(q.PRODUCT_STOCK_SQL, {"seller_id": seller_id})
     products = []
     for row in rows:
         products.append({
             **row,
-            "current_stock": _effective_stock(int(row["current_stock"]), row["product_id"], seller_id, MAX_STOCK),
-            "initial_stock": MAX_STOCK,
+            "current_stock": _effective_stock(int(row["current_stock"]), row["product_id"], seller_id),
         })
     return {"seller_id": seller_id, "products": products}
 
 
 @router.post("/stock/purchase")
 async def record_purchase(body: PurchaseRequest):
-    """Called by storefront at checkout for immediate stock deduction (no BigQuery lag)."""
+    """Storefront calls this at checkout — immediate stock deduction, no BigQuery lag."""
     store = _purchase_store[body.seller_id]
     for item in body.items:
         store[item.product_id] = store.get(item.product_id, 0) + item.quantity
@@ -195,37 +190,33 @@ async def record_purchase(body: PurchaseRequest):
 
 @router.post("/stock/restock")
 async def restock_product(body: RestockRequest):
-    MAX_STOCK = 10
+    """Add stock. Writes to BigQuery so it survives server restarts."""
     rows = await bq.query(q.PRODUCT_STOCK_SQL, {"seller_id": body.seller_id})
     product_row = next((r for r in rows if r["product_id"] == body.product_id), None)
     if not product_row:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    current = _effective_stock(int(product_row["current_stock"]), body.product_id, body.seller_id, MAX_STOCK)
-    space   = MAX_STOCK - current
-    if space <= 0:
-        raise HTTPException(status_code=400, detail="Stock is already at maximum (10 units)")
-    allowed = min(body.quantity, space)
-
-    # Persist to BigQuery: bridge gap when units_sold > initial_stock
-    units_sold_bq    = int(product_row.get("units_sold", 0))
-    initial_stock_bq = int(product_row.get("initial_stock", 0))
-    deficit = max(0, units_sold_bq - initial_stock_bq)
-    bq_qty  = allowed + deficit
-
+    # Persist to BigQuery
     try:
         await bq.query(q.RESTOCK_SQL, {
             "product_id": body.product_id,
             "seller_id":  body.seller_id,
-            "quantity":   bq_qty,
+            "quantity":   body.quantity,
         })
     except Exception:
-        pass
+        pass  # fall back to in-memory if BQ write fails
 
+    # Also update in-memory store for immediate API response
     _restock_store[body.seller_id][body.product_id] = \
-        _restock_store[body.seller_id].get(body.product_id, 0) + allowed
-    updated_stock = _effective_stock(int(product_row["current_stock"]), body.product_id, body.seller_id, MAX_STOCK)
-    return {"ok": True, "product_id": body.product_id, "quantity_added": allowed, "updated": {**product_row, "current_stock": updated_stock}}
+        _restock_store[body.seller_id].get(body.product_id, 0) + body.quantity
+
+    updated_stock = _effective_stock(int(product_row["current_stock"]), body.product_id, body.seller_id)
+    return {
+        "ok": True,
+        "product_id":    body.product_id,
+        "quantity_added": body.quantity,
+        "updated": {**product_row, "current_stock": updated_stock + body.quantity},
+    }
 
 
 @router.get("/products")
@@ -256,22 +247,20 @@ async def product_recommendations(
         except Exception as e:
             logger.warning("Gemini insights skipped: %s", e)
 
-    MAX_STOCK = 10
     enriched = []
     for row in rows:
         insight = ai_insights.get(row["product_id"], {})
         enriched.append({
             **row,
-            "current_stock": _effective_stock(int(row.get("current_stock", 0)), row["product_id"], seller_id, MAX_STOCK),
-            "initial_stock": MAX_STOCK,
-            "ai_insight": insight.get("insight"),
-            "ai_urgency": insight.get("urgency"),
+            "current_stock": _effective_stock(int(row.get("current_stock", 0)), row["product_id"], seller_id),
+            "ai_insight":        insight.get("insight"),
+            "ai_urgency":        insight.get("urgency"),
             "ai_revenue_impact": insight.get("monthly_revenue_impact"),
         })
 
     return {
-        "seller_id": seller_id,
-        "period_days": days,
-        "ai_powered": bool(ai_insights),
+        "seller_id":      seller_id,
+        "period_days":    days,
+        "ai_powered":     bool(ai_insights),
         "recommendations": enriched,
     }
