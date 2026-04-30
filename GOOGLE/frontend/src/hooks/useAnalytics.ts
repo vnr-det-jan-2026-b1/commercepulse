@@ -37,6 +37,11 @@ function recomputeLabel(r: Recommendation): string {
   return 'MAINTAIN';
 }
 
+// Shared flag: pauses stock/recommendations polling while a restock is settling.
+// Set to true in useRestock.onMutate, cleared in onSettled after the BQ
+// DML has propagated and the in-memory delta is still active as a safety net.
+let _restockSettling = false;
+
 // ── Queries ──────────────────────────────────────────────────────────────────
 
 export const useStorefront = (days: number, granularity: 'day' | 'hour') =>
@@ -50,7 +55,11 @@ export const useStock = () =>
   useQuery<{ products: StockItem[] }>({
     queryKey: ['stock'],
     queryFn: fetchStock,
-    refetchInterval: 2_000,   // 2 s — picks up _purchase_store deductions almost instantly
+    refetchInterval: (query) => {
+      // Pause background polling while a restock optimistic update is settling.
+      if (_restockSettling && query.state.data !== undefined) return false;
+      return 2_000;
+    },
     staleTime: 0,
   });
 
@@ -58,7 +67,10 @@ export const useRecommendations = (days: number) =>
   useQuery<{ recommendations: Recommendation[]; ai_powered?: boolean }>({
     queryKey: ['recommendations', days],
     queryFn: () => fetchRecommendations(days),
-    refetchInterval: 5_000,
+    refetchInterval: (query) => {
+      if (_restockSettling && query.state.data !== undefined) return false;
+      return 5_000;
+    },
     staleTime: 0,
   });
 
@@ -102,6 +114,10 @@ export const useRestock = () => {
     onMutate: async ({ productId, productName, quantity }) => {
       saveHistory(productId, productName, quantity);
 
+      // Pause background polling so new polls don't overwrite the optimistic
+      // update before BQ DML has propagated (cleared in onSettled).
+      _restockSettling = true;
+
       // Cancel any in-flight polls so they don't overwrite our optimistic update.
       await queryClient.cancelQueries({ queryKey: ['stock'] });
       await queryClient.cancelQueries({ queryKey: ['recommendations'] });
@@ -142,15 +158,18 @@ export const useRestock = () => {
     },
     mutationFn: ({ productId, quantity }) => restockProduct(productId, quantity),
     onError: (_err, _vars, ctx) => {
+      _restockSettling = false;
       if (ctx?.prevStock) queryClient.setQueryData(['stock'], ctx.prevStock);
       ctx?.prevRecs?.forEach(([key, data]) => queryClient.setQueryData(key as Parameters<typeof queryClient.setQueryData>[0], data));
     },
     onSettled: () => {
-      // 4 s: BQ DML propagates in ≤3 s; TTL expires at 8 s — safe window to refetch.
+      // 6 s: BQ DML propagates in ≤3 s; _RESTOCK_TTL_S is 30 s so delta is still
+      // active at 6 s — the first refetch always sees the correct post-restock value.
       setTimeout(() => {
+        _restockSettling = false;
         queryClient.invalidateQueries({ queryKey: ['stock'] });
         queryClient.invalidateQueries({ queryKey: ['recommendations'] });
-      }, 4000);
+      }, 6000);
     },
   });
 };

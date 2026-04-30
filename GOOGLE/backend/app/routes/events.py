@@ -2,6 +2,11 @@
 Public event-tracking endpoint.
 Receives storefront events (page_view, product_view, add_to_cart, purchase)
 and streams them into BigQuery cp_raw.storefront_events.
+
+Note: purchase events are deliberately skipped here — POST /v1/analytics/stock/purchase
+is the authoritative writer for purchases (DML INSERT, immediately query-visible).
+The storefront's tracker.purchase() still POSTs here for symmetry but its body is dropped
+to avoid duplicate rows that would double-count units_sold.
 """
 import uuid
 from datetime import datetime, timezone
@@ -30,6 +35,11 @@ class EventPayload(BaseModel):
 
 @router.post("", status_code=202)
 async def track_event(payload: EventPayload):
+    # purchase events are written by /v1/analytics/stock/purchase (DML INSERT)
+    # to keep BigQuery as the single source of truth without duplicate rows.
+    if payload.event_type == "purchase":
+        return {"ok": True, "skipped": "purchase events handled by /analytics/stock/purchase"}
+
     row = {
         "event_id":     str(uuid.uuid4()),
         "session_id":   payload.session_id,

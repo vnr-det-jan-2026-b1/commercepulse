@@ -337,6 +337,21 @@ ORDER BY product_id
 """
 
 
+# ── Purchase: DML INSERT into storefront_events ────────────────
+# Used instead of streaming insert for purchase events so they are
+# immediately query-visible, eliminating the _purchase_store double-count
+# window that streaming insert lag (up to 5 min) would otherwise cause.
+
+STOREFRONT_PURCHASE_INSERT_SQL = f"""
+INSERT INTO `{R}.storefront_events`
+  (event_id, session_id, seller_id, event_type, product_id, product_name,
+   price, quantity, page_url, ts)
+VALUES
+  (@event_id, @session_id, @seller_id, 'purchase', @product_id, @product_name,
+   @price, @quantity, @page_url, CURRENT_TIMESTAMP())
+"""
+
+
 # ── Restock: DML UPDATE on product_catalog ─────────────────────
 
 RESTOCK_SQL = f"""

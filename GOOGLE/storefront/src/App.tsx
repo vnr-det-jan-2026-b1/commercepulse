@@ -94,9 +94,11 @@ function App() {
   }
 
   async function handlePurchase(purchasedItems: CartItem[]) {
-    // 1. Immediately update backend in-memory purchase store (no BigQuery lag)
+    // 1. Record purchase in backend (updates _purchase_store and triggers BQ DML INSERT).
+    //    Only deduct from local stockMap if this succeeds — if it fails, BQ has no record
+    //    and we must not show a phantom deduction.
     try {
-      await fetch(`${API_URL}/v1/analytics/stock/purchase`, {
+      const res = await fetch(`${API_URL}/v1/analytics/stock/purchase`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -107,9 +109,14 @@ function App() {
           })),
         }),
       });
-    } catch { /* ignore — events still go to BigQuery */ }
+      if (!res.ok) throw new Error(`purchase POST ${res.status}`);
+    } catch (err) {
+      console.error("Purchase record failed — stock not deducted locally:", err);
+      setTimeout(refreshStock, 1000);
+      return;
+    }
 
-    // 2. Immediately deduct from local stockMap so UI reflects purchase at once
+    // 2. Immediately deduct from local stockMap so UI reflects purchase at once.
     setStockMap(prev => {
       const next = { ...prev };
       for (const { product, quantity } of purchasedItems) {
@@ -118,7 +125,7 @@ function App() {
       return next;
     });
 
-    // 3. Re-fetch from backend after a short delay to get server-confirmed stock
+    // 3. Re-fetch from backend after a short delay to get server-confirmed stock.
     setTimeout(refreshStock, 3000);
   }
 
