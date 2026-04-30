@@ -39,11 +39,20 @@ def _get_client() -> genai.Client:
 # ── Context builder ────────────────────────────────────────────
 
 async def build_seller_context(seller_id: str) -> dict:
+    # Compute KPIs directly from source tables (not the pre-computed gold table
+    # which may be stale or manually zeroed) using a 90-day window so older
+    # order data is still included.
     kpis_sql = f"""
-        SELECT total_net_revenue, total_orders, cancellation_rate_pct,
-               rto_rate_pct, avg_roas, low_stock_count, stockout_count
-        FROM `{settings.BQ_DATASET_GOLD}.seller_dashboard_kpis`
-        WHERE seller_id = @seller_id LIMIT 1
+        SELECT
+          ROUND(SUM(CAST(net_revenue AS FLOAT64)), 2)                         AS total_net_revenue,
+          COUNT(*)                                                             AS total_orders,
+          ROUND(COUNTIF(order_status = 'cancelled') / COUNT(*) * 100, 1)     AS cancellation_rate_pct,
+          ROUND(COUNTIF(return_flag) / COUNT(*) * 100, 1)                    AS rto_rate_pct,
+          COUNTIF(order_status = 'cancelled')                                 AS cancelled_orders,
+          COUNTIF(return_flag)                                                 AS returned_orders
+        FROM `{settings.BQ_DATASET_BRONZE}.orders`
+        WHERE seller_id = @seller_id
+          AND order_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
     """
     funnel_sql = f"""
         SELECT sku, marketplace,
@@ -55,7 +64,7 @@ async def build_seller_context(seller_id: str) -> dict:
                ROUND(AVG(roas), 2) AS roas
         FROM `{settings.BQ_DATASET_GOLD}.funnel_metrics`
         WHERE seller_id = @seller_id
-          AND metric_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)
+          AND metric_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
         GROUP BY sku, marketplace
         ORDER BY conv_pct DESC
         LIMIT 5
@@ -69,15 +78,33 @@ async def build_seller_context(seller_id: str) -> dict:
         ORDER BY days_until_stockout ASC
         LIMIT 5
     """
+    stock_sql = f"""
+        SELECT
+          COUNTIF(GREATEST(c.initial_stock - COALESCE(sold.qty,0), 0) = 0)      AS stockout_count,
+          COUNTIF(GREATEST(c.initial_stock - COALESCE(sold.qty,0), 0) BETWEEN 1 AND 3) AS low_stock_count
+        FROM `{settings.BQ_DATASET_RAW}.product_catalog` c
+        LEFT JOIN (
+          SELECT product_id, SUM(quantity) AS qty
+          FROM `{settings.BQ_DATASET_RAW}.storefront_events`
+          WHERE event_type = 'purchase' AND seller_id = @seller_id
+          GROUP BY product_id
+        ) sold ON sold.product_id = c.product_id
+        WHERE c.seller_id = @seller_id
+    """
     params = {"seller_id": seller_id}
-    kpis, funnel_top, risks = await asyncio.gather(
+    kpis, funnel_top, risks, stock_summary = await asyncio.gather(
         bq.query_single(kpis_sql, params),
         bq.query(funnel_sql, params),
         bq.query(risk_sql, params),
+        bq.query_single(stock_sql, params),
     )
+    kpis = kpis or {}
+    stock_summary = stock_summary or {}
+    kpis["low_stock_count"] = stock_summary.get("low_stock_count", 0)
+    kpis["stockout_count"] = stock_summary.get("stockout_count", 0)
     return {
         "seller_id": seller_id,
-        "kpis": kpis or {},
+        "kpis": kpis,
         "top_converting_products": funnel_top,
         "inventory_risks": risks,
     }
@@ -89,7 +116,7 @@ RECOMMENDATION_PROMPT = """
 You are a senior e-commerce analytics consultant advising Indian marketplace sellers.
 
 Seller: {seller_id}
-Analysis Period: Last 30 days
+Analysis Period: Last 90 days
 
 KPI Summary:
 - Total Net Revenue: ₹{total_net_revenue:,.0f}
