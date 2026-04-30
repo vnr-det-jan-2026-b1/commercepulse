@@ -17,9 +17,11 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 # _restock_store entries expire after _RESTOCK_TTL_S seconds — by that point
 # BigQuery has absorbed the DML UPDATE and bq_stock already reflects the addition.
 # Keeping the delta past the TTL would double-count it.
-_RESTOCK_TTL_S = 8
+_RESTOCK_TTL_S  = 8    # BQ DML UPDATE propagates in ~1-3 s; 8 s is safe headroom
+_PURCHASE_TTL_S = 300  # BQ streaming insert can take up to ~5 min; 5 min headroom
+
 _restock_store:  dict[str, dict[str, tuple[int, float]]] = defaultdict(dict)
-_purchase_store: dict[str, dict[str, int]] = defaultdict(dict)
+_purchase_store: dict[str, dict[str, tuple[int, float]]] = defaultdict(dict)
 
 
 def _restock_delta(seller_id: str, product_id: str) -> int:
@@ -34,10 +36,22 @@ def _restock_delta(seller_id: str, product_id: str) -> int:
     return qty
 
 
+def _purchase_delta(seller_id: str, product_id: str) -> int:
+    """Return the transient purchase deduction that has not yet been absorbed by BQ."""
+    entry = _purchase_store.get(seller_id, {}).get(product_id)
+    if not entry:
+        return 0
+    qty, ts = entry
+    if time.time() - ts > _PURCHASE_TTL_S:
+        _purchase_store[seller_id].pop(product_id, None)
+        return 0
+    return qty
+
+
 def _effective_stock(bq_stock: int, product_id: str, seller_id: str) -> int:
-    """BigQuery stock + transient restock delta - in-memory purchase deductions."""
+    """BQ stock + transient restock delta − transient purchase deduction."""
     restock  = _restock_delta(seller_id, product_id)
-    purchase = _purchase_store.get(seller_id, {}).get(product_id, 0)
+    purchase = _purchase_delta(seller_id, product_id)
     return max(0, bq_stock + restock - purchase)
 
 
@@ -212,9 +226,15 @@ async def product_stock(
 @router.post("/stock/purchase")
 async def record_purchase(body: PurchaseRequest):
     """Storefront calls this at checkout — immediate stock deduction, no BigQuery lag."""
+    now = time.time()
     store = _purchase_store[body.seller_id]
     for item in body.items:
-        store[item.product_id] = store.get(item.product_id, 0) + item.quantity
+        prev_qty, prev_ts = store.get(item.product_id, (0, 0.0))
+        if now - prev_ts <= _PURCHASE_TTL_S:
+            new_qty = prev_qty + item.quantity
+        else:
+            new_qty = item.quantity
+        store[item.product_id] = (new_qty, now)
     return {"ok": True}
 
 
