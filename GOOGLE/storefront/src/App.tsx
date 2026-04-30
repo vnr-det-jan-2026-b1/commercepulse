@@ -80,12 +80,13 @@ function App() {
   }, [refreshStock]);
 
   function handleAddToCart(product: Product) {
-    const stock = stockMap[product.id];
-    if (stock !== undefined && stock <= 0) return;
+    const MAX_STOCK = 10;
+    const stock = stockMap[product.id] ?? MAX_STOCK;
+    if (stock <= 0) return;
 
     // Don't exceed available stock when items are already in cart
     const inCart = items.find(i => i.product.id === product.id)?.quantity ?? 0;
-    if (stock !== undefined && inCart >= stock) return;
+    if (inCart >= stock) return;
 
     add(product);
     tracker.addToCart(product, 1);

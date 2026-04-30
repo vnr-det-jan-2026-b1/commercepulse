@@ -62,7 +62,7 @@ export function CartDrawer({ open, onClose, items, total, onRemove, onUpdateQuan
         ) : (
           <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: "8px" }}>
             {items.map(({ product, quantity }) => {
-              const availableStock = stockMap[product.id] ?? Infinity;
+              const availableStock = stockMap[product.id] ?? 10;
               const atStockLimit = quantity >= availableStock;
 
               return (

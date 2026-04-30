@@ -37,8 +37,8 @@ export function ProductDetail({ products, onAddToCart, cartItems, stockMap }: Pr
   const lowStock = stockLoaded && !soldOut && stock <= 3;
   const inCartQty = cartItems.find((i) => i.product.id === product.id)?.quantity ?? 0;
   const inCart = inCartQty > 0;
-  // How many more can still be added before hitting stock limit
-  const canAdd = stockLoaded ? Math.max(0, stock - inCartQty) : 5;
+  // How many more can still be added before hitting stock limit (cap at 10 if not yet loaded)
+  const canAdd = Math.max(0, (stockLoaded ? stock : 10) - inCartQty);
 
   function handleAdd() {
     if (soldOut || canAdd === 0) return;
