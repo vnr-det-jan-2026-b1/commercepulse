@@ -77,7 +77,7 @@ steps:
       - --timeout=300
       - --allow-unauthenticated
       - --service-account=sa-cloudrun-api@$PROJECT_ID.iam.gserviceaccount.com
-      - --set-env-vars=GCP_PROJECT=$PROJECT_ID,CP_DEV_MODE=false
+      - --set-env-vars=GCP_PROJECT=$PROJECT_ID,CP_DEV_MODE=true,VERTEX_LOCATION=us-central1,GEMINI_MODEL=gemini-2.0-flash-001
     waitFor: ["push-api"]
 
 images:

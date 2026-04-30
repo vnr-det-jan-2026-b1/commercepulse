@@ -1,6 +1,6 @@
 """Analytics routes — GET /analytics/*"""
 from collections import defaultdict
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel, Field
 
 from app.core.security import enforce_seller_scope
@@ -178,6 +178,21 @@ async def restock_product(body: RestockRequest):
     if space <= 0:
         raise HTTPException(status_code=400, detail="Stock is already at maximum (10 units)")
     allowed = min(body.quantity, space)
+
+    # BigQuery: if units_sold > initial_stock (oversold), we need extra units to bridge the gap
+    units_sold_bq   = int(product_row.get("units_sold", 0))
+    initial_stock_bq = int(product_row.get("initial_stock", 0))
+    deficit = max(0, units_sold_bq - initial_stock_bq)
+    bq_qty  = allowed + deficit  # brings current_stock in BQ to exactly `allowed`
+
+    try:
+        await bq.query(q.RESTOCK_SQL, {
+            "product_id": body.product_id,
+            "seller_id":  body.seller_id,
+            "quantity":   bq_qty,
+        })
+    except Exception:
+        pass  # fall back to in-memory store if BQ write fails
 
     store[body.product_id] = store.get(body.product_id, 0) + allowed
     updated = {**product_row, "current_stock": current + allowed}

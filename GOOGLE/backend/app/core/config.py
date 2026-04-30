@@ -25,8 +25,8 @@ class Settings(BaseSettings):
     CACHE_TTL_SECONDS: int = 3600
 
     # Vertex AI
-    VERTEX_LOCATION:     str = "asia-south1"
-    GEMINI_MODEL:        str = "gemini-1.5-pro"
+    VERTEX_LOCATION:     str = "us-central1"
+    GEMINI_MODEL:        str = "gemini-2.0-flash-001"
 
     # Pub/Sub
     PUBSUB_EVENTS_TOPIC: str = "commercepulse-events"
