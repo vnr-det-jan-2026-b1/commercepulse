@@ -35,6 +35,12 @@ ORDER_COL_MAP = {
     "delivery date": "delivery_date", "delivery_date": "delivery_date",
     "return": "return_flag", "return_flag": "return_flag",
     "cancellation reason": "cancellation_reason", "cancellation_reason": "cancellation_reason",
+    # Customer / payment fields (may be absent — handled gracefully)
+    "customer name": "customer_name", "customer_name": "customer_name",
+    "customer email": "customer_email", "customer_email": "customer_email",
+    "payment mode": "payment_mode", "payment_mode": "payment_mode", "payment": "payment_mode",
+    "customer city": "customer_city", "customer_city": "customer_city",
+    "customer state": "customer_state", "customer_state": "customer_state",
 }
 
 INVENTORY_COL_MAP = {
@@ -77,16 +83,20 @@ LOGISTICS_COL_MAP = {
     "order id": "external_order_id", "order_id": "external_order_id",
     "marketplace": "marketplace",
     "courier": "courier_name", "courier_name": "courier_name",
+    "carrier": "courier_name",                             # test_dataset alias
     "tracking id": "tracking_id", "tracking_id": "tracking_id",
+    "shipment id": "tracking_id", "shipment_id": "tracking_id",  # test_dataset alias
     "fulfillment type": "fulfillment_type", "fulfillment_type": "fulfillment_type",
     "warehouse id": "warehouse_id", "warehouse_id": "warehouse_id",
     "dispatch date": "dispatch_date", "dispatch_date": "dispatch_date",
     "expected delivery": "expected_delivery",
-    "actual delivery": "actual_delivery",
+    "estimated delivery": "expected_delivery", "estimated_delivery": "expected_delivery",  # test_dataset alias
+    "actual delivery": "actual_delivery", "actual_delivery": "actual_delivery",
     "delivery status": "delivery_status", "delivery_status": "delivery_status", "status": "delivery_status",
     "rto": "rto_flag", "rto_flag": "rto_flag",
-    "rto reason": "rto_reason",
+    "rto reason": "rto_reason", "rto_reason": "rto_reason",
     "snapshot date": "snapshot_date", "date": "snapshot_date",
+    "shipping cost": "_shipping_cost", "shipping_cost": "_shipping_cost",  # ignored safely
 }
 
 
@@ -124,6 +134,8 @@ def _normalise_columns(df: pd.DataFrame, col_map: dict) -> pd.DataFrame:
             rename[original_col] = "marketplace"
         elif "order" in c and "id" in c:
             rename[original_col] = "external_order_id"
+        elif "shipment" in c and "id" in c:
+            rename[original_col] = "tracking_id"
         elif "stock" in c and "avail" in c:
             rename[original_col] = "available_stock"
         elif "stock" in c and "reserv" in c:
@@ -134,6 +146,10 @@ def _normalise_columns(df: pd.DataFrame, col_map: dict) -> pd.DataFrame:
             rename[original_col] = "ad_spend"
         elif "return" in c and "ad" in c:
             rename[original_col] = "revenue_from_ads"
+        elif "carrier" in c:
+            rename[original_col] = "courier_name"
+        elif "estimated" in c and "deliver" in c:
+            rename[original_col] = "expected_delivery"
             
     return df.rename(columns=rename)
 
@@ -244,50 +260,84 @@ async def ingest_orders(db: AsyncSession, df: pd.DataFrame, seller_id: str, snap
     rows_skipped  = 0
     product_cache = {}
     
-    orders_to_add = []
-    
     # Pre-warm product cache in one batch
     skus = df.get("sku", pd.Series(dtype=str)).astype(str).str.strip().tolist()
     marketplaces = df.get("marketplace", pd.Series(dtype=str)).astype(str).str.strip().tolist()
     await _resolve_products_batch(db, seller_id, skus, marketplaces, product_cache)
 
-    # Use itertuples for massive speedup over iterrows
+    values_list = []
+    
     for row in df.itertuples(index=False):
         row_dict = row._asdict()
         try:
             sku         = str(row_dict.get("sku", "")).strip()
             if not sku or sku == "nan":
-                # Fallback if SKU column is entirely missing in large test datasets
                 sku = "UNKNOWN-SKU"
                 
             marketplace = str(row_dict.get("marketplace", "unknown")).strip()
-
             product_id = await _resolve_product(db, seller_id, sku, marketplace, product_cache)
 
-            order = Order(
-                external_order_id   = str(row_dict.get("external_order_id", "")) or None,
-                seller_id           = seller_id,
-                product_id          = product_id,
-                marketplace         = marketplace,
-                order_status        = str(row_dict.get("order_status", "unknown")),
-                quantity            = _safe_int(row_dict.get("quantity"), 1),
-                selling_price       = _safe_float(row_dict.get("selling_price")),
-                discount            = _safe_float(row_dict.get("discount")),
-                tax                 = _safe_float(row_dict.get("tax")),
-                shipping_fee        = _safe_float(row_dict.get("shipping_fee")),
-                order_date          = _parse_date(row_dict.get("order_date")) or snapshot_date,
-                delivery_date       = _parse_date(row_dict.get("delivery_date")),
-                return_flag         = bool(row_dict.get("return_flag", False)),
-                cancellation_reason = str(row_dict.get("cancellation_reason", "")) or None,
-                snapshot_date       = snapshot_date,
-            )
-            orders_to_add.append(order)
+            # Handle return_flag — may be string 'True'/'False' or bool
+            raw_return = row_dict.get("return_flag", False)
+            if isinstance(raw_return, str):
+                return_flag = raw_return.strip().lower() in ("true", "1", "yes")
+            else:
+                return_flag = bool(raw_return)
+
+            values_list.append({
+                "external_order_id":   str(row_dict.get("external_order_id", "")) or None,
+                "seller_id":           seller_id,
+                "product_id":          product_id,
+                "marketplace":         marketplace,
+                "order_status":        str(row_dict.get("order_status", "unknown")),
+                "quantity":            _safe_int(row_dict.get("quantity"), 1),
+                "selling_price":       _safe_float(row_dict.get("selling_price")),
+                "discount":            _safe_float(row_dict.get("discount")),
+                "tax":                 _safe_float(row_dict.get("tax")),
+                "shipping_fee":        _safe_float(row_dict.get("shipping_fee")),
+                "order_date":          _parse_date(row_dict.get("order_date")) or snapshot_date,
+                "delivery_date":       _parse_date(row_dict.get("delivery_date")),
+                "return_flag":         return_flag,
+                "cancellation_reason": str(row_dict.get("cancellation_reason", "")) or None,
+                "customer_name":       str(row_dict.get("customer_name", "")).strip() or None,
+                "customer_email":      str(row_dict.get("customer_email", "")).strip() or None,
+                "payment_mode":        str(row_dict.get("payment_mode", "")).strip() or None,
+                "snapshot_date":       snapshot_date,
+            })
             rows_inserted += 1
-        except Exception as e:
+        except Exception:
             rows_skipped += 1
 
-    if orders_to_add:
-        db.add_all(orders_to_add)
+    if values_list:
+        # Deduplicate values list based on ON CONFLICT key
+        seen = {}
+        no_eid = []
+        for v in values_list:
+            if v.get("external_order_id"):
+                seen[v["external_order_id"]] = v
+            else:
+                no_eid.append(v)
+        values_list = list(seen.values()) + no_eid
+        
+        # Split into two paths: rows WITH an external_order_id (upsert) and
+        # rows WITHOUT one (plain insert) to avoid NULL conflict key issues.
+        with_eid = [v for v in values_list if v.get("external_order_id")]
+        without_eid = [v for v in values_list if not v.get("external_order_id")]
+
+        for i in range(0, len(with_eid), 1000):
+            stmt = pg_insert(Order).values(with_eid[i:i+1000]).on_conflict_do_update(
+                index_elements=["external_order_id"],
+                index_where=Order.external_order_id.isnot(None),
+                set_={
+                    "order_status": pg_insert(Order).excluded.order_status,
+                    "delivery_date": pg_insert(Order).excluded.delivery_date,
+                },
+            )
+            await db.execute(stmt)
+
+        for i in range(0, len(without_eid), 1000):
+            await db.execute(pg_insert(Order).values(without_eid[i:i+1000]).on_conflict_do_nothing())
+
     await db.commit()
     return {"inserted": rows_inserted, "skipped": rows_skipped, "domain": "orders"}
 
@@ -303,6 +353,34 @@ async def ingest_inventory(db: AsyncSession, df: pd.DataFrame, seller_id: str, s
     skus = df.get("sku", pd.Series(dtype=str)).astype(str).str.strip().tolist()
     marketplaces = df.get("marketplace", pd.Series(dtype=str)).astype(str).str.strip().tolist()
     await _resolve_products_batch(db, seller_id, skus, marketplaces, product_cache)
+
+    # Enrich Product records if Inventory sheet has product_name/category
+    has_product_name = "product_name" in df.columns
+    has_category     = "category" in df.columns
+    if has_product_name or has_category:
+        for row in df.itertuples(index=False):
+            row_dict = row._asdict()
+            sku = str(row_dict.get("sku", "")).strip()
+            marketplace = str(row_dict.get("marketplace", "unknown")).strip()
+            cache_key = (sku, marketplace)
+            pid = product_cache.get(cache_key)
+            if not pid:
+                continue
+            updates = {}
+            if has_product_name:
+                pname = str(row_dict.get("product_name", "")).strip()
+                if pname and pname != "nan":
+                    updates["product_name"] = pname
+            if has_category:
+                cat = str(row_dict.get("category", "")).strip()
+                if cat and cat != "nan":
+                    updates["category"] = cat
+            if updates:
+                from sqlalchemy import update
+                await db.execute(
+                    update(Product).where(Product.product_id == pid).values(**updates)
+                )
+        await db.flush()
 
     values_list = []
 
@@ -335,14 +413,21 @@ async def ingest_inventory(db: AsyncSession, df: pd.DataFrame, seller_id: str, s
             rows_skipped += 1
 
     if values_list:
-        stmt = pg_insert(InventorySnapshot).values(values_list).on_conflict_do_update(
-            index_elements=["seller_id", "product_id", "marketplace", "snapshot_date"],
-            set_={
-                "available_stock": pg_insert(InventorySnapshot).excluded.available_stock,
-                "reserved_stock": pg_insert(InventorySnapshot).excluded.reserved_stock,
-            },
-        )
-        await db.execute(stmt)
+        seen = {}
+        for v in values_list:
+            key = (v["seller_id"], v["product_id"], v["marketplace"], v["snapshot_date"])
+            seen[key] = v
+        values_list = list(seen.values())
+        
+        for i in range(0, len(values_list), 1000):
+            stmt = pg_insert(InventorySnapshot).values(values_list[i:i+1000]).on_conflict_do_update(
+                index_elements=["seller_id", "product_id", "marketplace", "snapshot_date"],
+                set_={
+                    "available_stock": pg_insert(InventorySnapshot).excluded.available_stock,
+                    "reserved_stock": pg_insert(InventorySnapshot).excluded.reserved_stock,
+                },
+            )
+            await db.execute(stmt)
 
     await db.commit()
     return {"inserted": rows_inserted, "skipped": rows_skipped, "domain": "inventory"}
@@ -394,14 +479,21 @@ async def ingest_pricing(db: AsyncSession, df: pd.DataFrame, seller_id: str, sna
             rows_skipped += 1
 
     if values_list:
-        stmt = pg_insert(PricingSnapshot).values(values_list).on_conflict_do_update(
-            index_elements=["seller_id", "product_id", "marketplace", "snapshot_date"],
-            set_={
-                "selling_price": pg_insert(PricingSnapshot).excluded.selling_price,
-                "cost_price": pg_insert(PricingSnapshot).excluded.cost_price
-            },
-        )
-        await db.execute(stmt)
+        seen = {}
+        for v in values_list:
+            key = (v["seller_id"], v["product_id"], v["marketplace"], v["snapshot_date"])
+            seen[key] = v
+        values_list = list(seen.values())
+        
+        for i in range(0, len(values_list), 1000):
+            stmt = pg_insert(PricingSnapshot).values(values_list[i:i+1000]).on_conflict_do_update(
+                index_elements=["seller_id", "product_id", "marketplace", "snapshot_date"],
+                set_={
+                    "selling_price": pg_insert(PricingSnapshot).excluded.selling_price,
+                    "cost_price": pg_insert(PricingSnapshot).excluded.cost_price
+                },
+            )
+            await db.execute(stmt)
 
     await db.commit()
     return {"inserted": rows_inserted, "skipped": rows_skipped, "domain": "pricing"}
@@ -451,15 +543,22 @@ async def ingest_traffic(db: AsyncSession, df: pd.DataFrame, seller_id: str, sna
             rows_skipped += 1
 
     if values_list:
-        stmt = pg_insert(TrafficMetric).values(values_list).on_conflict_do_update(
-            index_elements=["seller_id", "product_id", "marketplace", "metric_date"],
-            set_={
-                "impressions": pg_insert(TrafficMetric).excluded.impressions,
-                "clicks": pg_insert(TrafficMetric).excluded.clicks,
-                "ad_spend": pg_insert(TrafficMetric).excluded.ad_spend,
-            },
-        )
-        await db.execute(stmt)
+        seen = {}
+        for v in values_list:
+            key = (v["seller_id"], v["product_id"], v["marketplace"], v["metric_date"])
+            seen[key] = v
+        values_list = list(seen.values())
+        
+        for i in range(0, len(values_list), 1000):
+            stmt = pg_insert(TrafficMetric).values(values_list[i:i+1000]).on_conflict_do_update(
+                index_elements=["seller_id", "product_id", "marketplace", "metric_date"],
+                set_={
+                    "impressions": pg_insert(TrafficMetric).excluded.impressions,
+                    "clicks": pg_insert(TrafficMetric).excluded.clicks,
+                    "ad_spend": pg_insert(TrafficMetric).excluded.ad_spend,
+                },
+            )
+            await db.execute(stmt)
 
     await db.commit()
     return {"inserted": rows_inserted, "skipped": rows_skipped, "domain": "traffic"}
@@ -471,35 +570,72 @@ async def ingest_logistics(db: AsyncSession, df: pd.DataFrame, seller_id: str, s
     rows_inserted = 0
     rows_skipped  = 0
     
-    logistics_to_add = []
+    values_list = []
 
     for row in df.itertuples(index=False):
         row_dict = row._asdict()
         try:
             marketplace = str(row_dict.get("marketplace", "unknown")).strip()
-            ext_order_id = str(row_dict.get("external_order_id", "")).strip() or None
+            # tracking_id may have been mapped from shipment_id
+            raw_tid = row_dict.get("tracking_id", "")
+            ext_id = str(raw_tid).strip() if not pd.isna(raw_tid) else None
+            if ext_id == "nan" or ext_id == "":
+                ext_id = None
 
-            logic_row = LogisticsMetric(
-                seller_id          = seller_id,
-                marketplace        = marketplace,
-                courier_name       = str(row_dict.get("courier_name", "")) or None,
-                tracking_id        = str(row_dict.get("tracking_id", "")) or None,
-                fulfillment_type   = str(row_dict.get("fulfillment_type", "seller")),
-                warehouse_id       = str(row_dict.get("warehouse_id", "")) or None,
-                dispatch_date      = _parse_date(row_dict.get("dispatch_date")),
-                expected_delivery  = _parse_date(row_dict.get("expected_delivery")),
-                actual_delivery    = _parse_date(row_dict.get("actual_delivery")),
-                delivery_status    = str(row_dict.get("delivery_status", "unknown")),
-                rto_flag           = bool(row_dict.get("rto_flag", False)),
-                rto_reason         = str(row_dict.get("rto_reason", "")) or None,
-                snapshot_date      = _parse_date(row_dict.get("snapshot_date")) or snapshot_date,
-            )
-            logistics_to_add.append(logic_row)
+            # Handle rto_flag — may be string 'True'/'False' or bool
+            raw_rto = row_dict.get("rto_flag", False)
+            if isinstance(raw_rto, str):
+                rto_flag = raw_rto.strip().lower() in ("true", "1", "yes")
+            else:
+                rto_flag = bool(raw_rto) if not pd.isna(raw_rto) else False
+
+            values_list.append({
+                "seller_id":          seller_id,
+                "marketplace":        marketplace,
+                "courier_name":       str(row_dict.get("courier_name", "")) or None,
+                "tracking_id":        ext_id,
+                "fulfillment_type":   str(row_dict.get("fulfillment_type", "seller")),
+                "warehouse_id":       str(row_dict.get("warehouse_id", "")) or None,
+                "dispatch_date":      _parse_date(row_dict.get("dispatch_date")),
+                "expected_delivery":  _parse_date(row_dict.get("expected_delivery")),
+                "actual_delivery":    _parse_date(row_dict.get("actual_delivery")),
+                "delivery_status":    str(row_dict.get("delivery_status", "unknown")),
+                "rto_flag":           rto_flag,
+                "rto_reason":         str(row_dict.get("rto_reason", "")) or None,
+                "snapshot_date":      _parse_date(row_dict.get("snapshot_date")) or snapshot_date,
+            })
             rows_inserted += 1
         except Exception:
             rows_skipped += 1
 
-    if logistics_to_add:
-        db.add_all(logistics_to_add)
+    if values_list:
+        seen = {}
+        no_tid = []
+        for v in values_list:
+            if v.get("tracking_id"):
+                key = (v["seller_id"], v["tracking_id"], v["marketplace"], v["snapshot_date"])
+                seen[key] = v
+            else:
+                no_tid.append(v)
+        values_list = list(seen.values()) + no_tid
+        
+        # Split: rows with tracking_id can be upserted; rows without get plain inserts
+        with_tid = [v for v in values_list if v.get("tracking_id")]
+        without_tid = [v for v in values_list if not v.get("tracking_id")]
+
+        for i in range(0, len(with_tid), 1000):
+            stmt = pg_insert(LogisticsMetric).values(with_tid[i:i+1000]).on_conflict_do_update(
+                index_elements=["seller_id", "tracking_id", "marketplace", "snapshot_date"],
+                index_where=LogisticsMetric.tracking_id.isnot(None),
+                set_={
+                    "delivery_status": pg_insert(LogisticsMetric).excluded.delivery_status,
+                    "actual_delivery": pg_insert(LogisticsMetric).excluded.actual_delivery,
+                },
+            )
+            await db.execute(stmt)
+
+        for i in range(0, len(without_tid), 1000):
+            await db.execute(pg_insert(LogisticsMetric).values(without_tid[i:i+1000]).on_conflict_do_nothing())
+
     await db.commit()
     return {"inserted": rows_inserted, "skipped": rows_skipped, "domain": "logistics"}
