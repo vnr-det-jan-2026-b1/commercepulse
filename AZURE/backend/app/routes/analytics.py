@@ -635,3 +635,45 @@ async def products_list(
         processed_rows.append(d)
         
     return {"seller_id": seller_id, "data": processed_rows}
+
+
+# ── AI Tool Endpoints (Product specific) ────────────────────────
+@router.get("/product/{product_id}/roas", summary="Live ROAS for a specific product")
+async def product_roas(
+    product_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    sql = text("""
+        SELECT 
+            CASE WHEN SUM(ad_spend) > 0 THEN ROUND(SUM(revenue_from_ads) / SUM(ad_spend), 2) ELSE 0 END AS roas,
+            COALESCE(SUM(ad_spend), 0) AS total_spend
+        FROM traffic_metrics
+        WHERE product_id = CAST(:product_id AS UUID)
+    """)
+    result = await db.execute(sql, {"product_id": product_id})
+    row = result.mappings().first()
+    return {
+        "product_id": product_id,
+        "roas": float(row["roas"] or 0),
+        "total_spend": float(row["total_spend"] or 0)
+    }
+
+@router.get("/inventory/{product_id}", summary="Live inventory for a specific product")
+async def product_inventory(
+    product_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    sql = text("""
+        SELECT COALESCE(SUM(available_stock), 0) AS available_stock
+        FROM inventory_snapshots
+        WHERE product_id = CAST(:product_id AS UUID)
+          AND snapshot_date = (
+              SELECT MAX(snapshot_date) FROM inventory_snapshots WHERE product_id = CAST(:product_id AS UUID)
+          )
+    """)
+    result = await db.execute(sql, {"product_id": product_id})
+    row = result.mappings().first()
+    return {
+        "product_id": product_id,
+        "available_stock": int(row["available_stock"] or 0)
+    }

@@ -115,11 +115,11 @@ IMPORTANT: Every action in recommended_actions MUST include ALL required fields:
             
             # Execute tool if requested
             if getattr(ai_msg, "tool_calls", None):
+                messages.append(ai_msg)
                 for tool_call in ai_msg.tool_calls:
                     if tool_call["name"] == "fetch_live_product_roas":
                         product_id = tool_call["args"].get("product_id", "")
                         tool_res = fetch_live_product_roas.invoke({"product_id": product_id})
-                        messages.append(ai_msg)
                         messages.append({"role": "tool", "tool_call_id": tool_call["id"], "name": tool_call["name"], "content": str(tool_res)})
             
             # Now extract the final structured output
