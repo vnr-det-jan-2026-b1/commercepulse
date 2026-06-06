@@ -62,7 +62,7 @@ class Order(Base):
     __tablename__ = "orders"
 
     order_id            = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    external_order_id   = Column(Text, index=True)
+    external_order_id   = Column(Text, unique=True, index=True)  # must be unique for ON CONFLICT upsert
     seller_id           = Column(UUID(as_uuid=True), ForeignKey("sellers.seller_id", ondelete="CASCADE"), nullable=False, index=True)
     product_id          = Column(UUID(as_uuid=True), ForeignKey("products.product_id", ondelete="SET NULL"), index=True)
     marketplace         = Column(Text, nullable=False, index=True)
@@ -76,6 +76,9 @@ class Order(Base):
     delivery_date       = Column(Date)
     return_flag         = Column(Boolean, default=False, index=True)
     cancellation_reason = Column(Text)
+    customer_name       = Column(Text)    # may be NULL if dataset lacks this column
+    customer_email      = Column(Text)
+    payment_mode        = Column(Text)
     snapshot_date       = Column(Date, nullable=False, default=date.today, index=True)
     created_at          = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -140,6 +143,7 @@ class TrafficMetric(Base):
 # ── LogisticsMetric ────────────────────────────────────────────
 class LogisticsMetric(Base):
     __tablename__ = "logistics_metrics"
+    __table_args__ = (UniqueConstraint("seller_id", "tracking_id", "marketplace", "snapshot_date"),)
 
     id                 = Column(BigInteger, primary_key=True, autoincrement=True)
     order_id           = Column(UUID(as_uuid=True), ForeignKey("orders.order_id", ondelete="SET NULL"))

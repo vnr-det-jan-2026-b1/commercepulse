@@ -25,18 +25,19 @@ def run_customer_agent(state: SystemState) -> dict:
     # Extract real data (handle both global and per-product schemas)
     if "pricing_by_marketplace" in snapshot:
         # Product mode
-        dashboard_kpis = json.dumps(snapshot.get("profit_and_loss", {}), indent=2, default=str)
-        revenue_by_mp = json.dumps(snapshot.get("revenue_by_marketplace", []), indent=2, default=str)
-        pricing_margins = json.dumps(snapshot.get("pricing_by_marketplace", []), indent=2, default=str)
-        traffic_funnel = json.dumps(snapshot.get("advertising_performance", {}), indent=2, default=str)
-        inventory_status = json.dumps(snapshot.get("inventory_health", {}), indent=2, default=str)
+        dashboard_kpis = json.dumps(snapshot.get("profit_and_loss", {}), indent=2, default=str)[:800]
+        revenue_by_mp = json.dumps(snapshot.get("revenue_by_marketplace", []), indent=2, default=str)[:800]
+        pricing_margins = json.dumps(snapshot.get("pricing_by_marketplace", []), indent=2, default=str)[:800]
+        traffic_funnel = json.dumps(snapshot.get("advertising_performance", {}), indent=2, default=str)[:800]
+        inventory_status = json.dumps(snapshot.get("inventory_health", {}), indent=2, default=str)[:800]
     else:
         # Global mode
-        dashboard_kpis = json.dumps(snapshot.get("dashboard_kpis", {}), indent=2, default=str)
-        revenue_by_mp = json.dumps(snapshot.get("revenue_by_marketplace", []), indent=2, default=str)
-        pricing_margins = json.dumps(snapshot.get("pricing_margins", [])[:15], indent=2, default=str)
-        traffic_funnel = json.dumps(snapshot.get("traffic_funnel", [])[:15], indent=2, default=str)
-        inventory_status = json.dumps(snapshot.get("inventory_status", [])[:15], indent=2, default=str)
+        dashboard_kpis = json.dumps(snapshot.get("dashboard_kpis", {}), indent=2, default=str)[:800]
+        revenue_by_mp = json.dumps(snapshot.get("revenue_by_marketplace", []), indent=2, default=str)[:800]
+        pricing_margins = json.dumps(snapshot.get("pricing_margins", [])[:5], indent=2, default=str)[:800]
+        traffic_funnel = json.dumps(snapshot.get("traffic_funnel", [])[:5], indent=2, default=str)[:800]
+        inventory_status = json.dumps(snapshot.get("inventory_status", [])[:5], indent=2, default=str)[:800]
+
 
     try:
         recent_context = fetch_recent_context(seller_id, limit=3)
@@ -44,7 +45,7 @@ def run_customer_agent(state: SystemState) -> dict:
         print(f"  ⚠️ Could not fetch Supabase context: {e}")
         recent_context = "No historical context available (Supabase unavailable)."
 
-    llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0.0)
+    llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.1)
     structured_llm = llm.with_structured_output(MarketInsights)
 
     prompt = f"""
@@ -74,6 +75,12 @@ Shows impressions, clicks, sessions, orders, CTR, conversion_rate, ad_spend, rev
 {recent_context}
 
 YOUR ANALYSIS MUST:
+<thinking>
+First, review the KPIs and Marketplace splits to find the biggest gap in channel performance.
+Next, analyze pricing margins vs traffic. Does high traffic translate to high conversion? If not, why?
+Then, look for SKUs carrying the bulk of the revenue.
+Formulate specific strategies to fix these gaps.
+</thinking>
 
 1. **Channel Performance Gap**: Compare Amazon vs Flipkart vs Shopify on revenue, orders, avg_order_value, and cancellation rate. Identify the WEAKEST channel and diagnose WHY it's underperforming (is it traffic? conversion? pricing? inventory?).
 
@@ -83,24 +90,24 @@ YOUR ANALYSIS MUST:
 
 4. **Cancellation & Return Pattern**: From the KPIs, analyze cancellation_rate_pct. If it's above 5%, that's a red flag. Hypothesize the most likely cause based on the available data (pricing mismatch? delivery speed? product expectations?).
 
-5. **Growth Strategy**: For each underperforming channel or product, provide a SPECIFIC strategy:
+5. **Growth Strategy**: For each underperforming channel or product, provide a SPECIFIC, AGGRESSIVE strategy:
    - "Launch BB-CF-008 Cold Brew on Flipkart with a ₹50 introductory discount — this product does ₹X/month on Amazon but has zero presence on Flipkart"
    - "Increase Shopify organic traffic by creating coffee brewing guide content — Shopify has the highest margin (0% commission) but lowest traffic"
 
-Reference actual product names, prices, and marketplace data from above. Do NOT give generic advice like "improve customer experience".
+Reference actual product names, prices, and marketplace data from above. Do NOT give generic advice like "improve customer experience". Be ruthless about protecting margins.
 
 IMPORTANT: Every action in recommended_actions MUST include ALL required fields: action_name, reason, strategy, description, estimated_impact_percentage, financial_impact_monthly, is_profit_safe, risk_level, difficulty, timeframe. Do NOT omit any field.
 """
 
     from app.utils import get_groq_api_key
-    llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0.0)
-
+    
     import time
     max_retries = 3
     for attempt in range(max_retries + 1):
         try:
             key = get_groq_api_key()
-            result: MarketInsights = llm.with_config({"api_key": key}).with_structured_output(MarketInsights).invoke(prompt)
+            llm = ChatGroq(api_key=key, model="llama-3.3-70b-versatile", temperature=0.1)
+            result: MarketInsights = llm.with_structured_output(MarketInsights).invoke(prompt)
             return {"market_insights": result}
         except Exception as e:
             error_str = str(e)

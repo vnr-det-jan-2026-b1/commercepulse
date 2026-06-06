@@ -92,39 +92,47 @@ export const aiApiClient = {
   },
 };
 
+let _sellerPromise: Promise<string> | null = null;
+
 /**
  * Ensures a seller exists in the backend. Creates one if none exist.
  * Returns the seller_id to use for all subsequent API calls.
  */
 export async function ensureSeller(): Promise<string> {
   if (_sellerId) return _sellerId;
+  if (_sellerPromise) return _sellerPromise;
 
-  try {
-    const sellers = await apiClient.get('/sellers/');
-    // Find our specific startup seller
-    const brewBoulevard = sellers.find((s: any) => s.seller_name === 'Brew Boulevard');
-    if (brewBoulevard) {
-      _sellerId = brewBoulevard.seller_id;
-      return _sellerId!;
+  _sellerPromise = (async () => {
+    try {
+      const sellers = await apiClient.get('/sellers/');
+      // Find our specific startup seller
+      const brewBoulevard = sellers.find((s: any) => s.seller_name === 'Brew Boulevard');
+      if (brewBoulevard) {
+        _sellerId = brewBoulevard.seller_id;
+        return _sellerId!;
+      }
+    } catch (err) {
+      console.warn("Sellers check failed, will attempt to create:", err);
     }
-  } catch (err) {
-    console.warn("Sellers check failed, will attempt to create:", err);
-  }
 
-  // Create the one and only Brew Boulevard identity
-  try {
-    const newSeller = await apiClient.post('/sellers/', {
-      seller_name: 'Brew Boulevard',
-      marketplace: 'multi',
-      region: 'IN',
-      email: 'hello@brewboulevard.in',
-    });
-    _sellerId = newSeller.seller_id;
-    return _sellerId!;
-  } catch (err) {
-    console.error("Failed to initialize Brew Boulevard:", err);
-    throw err;
-  }
+    // Create the one and only Brew Boulevard identity
+    try {
+      const newSeller = await apiClient.post('/sellers/', {
+        seller_name: 'Brew Boulevard',
+        marketplace: 'multi',
+        region: 'IN',
+        email: 'hello@brewboulevard.in',
+      });
+      _sellerId = newSeller.seller_id;
+      return _sellerId!;
+    } catch (err) {
+      console.error("Failed to initialize Brew Boulevard:", err);
+      _sellerPromise = null; // allow retry on next call
+      throw err;
+    }
+  })();
+
+  return _sellerPromise;
 }
 
 // -------------------------------------------------------------------

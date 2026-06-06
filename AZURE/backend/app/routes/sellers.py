@@ -21,6 +21,23 @@ class SellerCreate(BaseModel):
 @router.post("/", summary="Register a new seller")
 async def create_seller(payload: SellerCreate, db: AsyncSession = Depends(get_db)):
     try:
+        # Check if seller already exists by name or email
+        existing_query = select(Seller).where(
+            (Seller.seller_name == payload.seller_name) | 
+            (Seller.email == payload.email)
+        )
+        result = await db.execute(existing_query)
+        existing_seller = result.scalar_one_or_none()
+        
+        if existing_seller:
+            return {
+                "seller_id":   str(existing_seller.seller_id),
+                "seller_name": existing_seller.seller_name,
+                "marketplace": existing_seller.marketplace,
+                "created_at":  str(existing_seller.created_at),
+                "message": "Existing seller found"
+            }
+
         seller = Seller(
             seller_name = payload.seller_name,
             marketplace = payload.marketplace,

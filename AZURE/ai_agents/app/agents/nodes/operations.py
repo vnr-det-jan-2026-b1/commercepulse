@@ -26,24 +26,22 @@ def run_ops_agent(state: SystemState) -> dict:
     # Extract real data (handle both global and per-product schemas)
     if "logistics_quality" in snapshot:
         # Product mode
-        dashboard_kpis = json.dumps(snapshot.get("profit_and_loss", {}), indent=2, default=str)
-        logistics = json.dumps(snapshot.get("logistics_quality", {}), indent=2, default=str)
-        inventory_alerts = json.dumps(snapshot.get("inventory_health", {}), indent=2, default=str)
-        inventory_status = json.dumps(snapshot.get("inventory_health", {}), indent=2, default=str)
+        dashboard_kpis = json.dumps(snapshot.get("profit_and_loss", {}), indent=2, default=str)[:800]
+        logistics = json.dumps(snapshot.get("logistics_quality", {}), indent=2, default=str)[:800]
+        inventory_alerts = json.dumps(snapshot.get("inventory_health", {}), indent=2, default=str)[:800]
+        inventory_status = json.dumps(snapshot.get("inventory_health", {}), indent=2, default=str)[:800]
     else:
         # Global mode
-        dashboard_kpis = json.dumps(snapshot.get("dashboard_kpis", {}), indent=2, default=str)
-        logistics = json.dumps(snapshot.get("logistics", []), indent=2, default=str)
-        inventory_alerts = json.dumps(snapshot.get("inventory_alerts", [])[:10], indent=2, default=str)
-        inventory_status = json.dumps(snapshot.get("inventory_status", [])[:15], indent=2, default=str)
+        dashboard_kpis = json.dumps(snapshot.get("dashboard_kpis", {}), indent=2, default=str)[:800]
+        logistics = json.dumps(snapshot.get("logistics", [])[:5], indent=2, default=str)[:800]
+        inventory_alerts = json.dumps(snapshot.get("inventory_alerts", [])[:5], indent=2, default=str)[:800]
+        inventory_status = json.dumps(snapshot.get("inventory_status", [])[:5], indent=2, default=str)[:800]
 
     try:
         recent_context = fetch_recent_context(seller_id, limit=3)
     except Exception as e:
         print(f"  ⚠️ Could not fetch Supabase context: {e}")
         recent_context = "No historical context available (Supabase unavailable)."
-
-    llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0.0)
 
     prompt = f"""You are the Chief Operating Officer (COO) of a D2C coffee brand ("Brew Boulevard") selling across Amazon India, Flipkart, and Shopify in India.
 
@@ -66,6 +64,12 @@ Each row shows: marketplace, total_shipments, rto_count, rto_rate_pct, delivered
 {recent_context}
 
 YOUR ANALYSIS MUST:
+<thinking>
+1. Identify the highest RTO rates and calculate the financial hit (RTO count * ~200 INR).
+2. Compare FBA/WFS/Assured fulfillment against seller-fulfilled RTO and delivery speeds.
+3. Check inventory status for critical out-of-stock risks.
+4. Formulate specific operational fixes.
+</thinking>
 
 1. **RTO Root Cause Analysis**: Which marketplace + fulfillment_type combination has the WORST RTO rate? Calculate the exact financial cost of RTO for that combination. In India, a typical RTO costs ₹150-300 per order (forward + reverse shipping + packaging damage). Multiply by rto_count to get total RTO cost.
 
@@ -90,7 +94,8 @@ Use ONLY the real data provided. Do NOT make up numbers. If a data section is em
     for attempt in range(max_retries + 1):
         try:
             key = get_groq_api_key()
-            result: OperationsInsights = llm.with_config({"api_key": key}).with_structured_output(OperationsInsights).invoke(prompt)
+            llm = ChatGroq(api_key=key, model="llama-3.3-70b-versatile", temperature=0.0)
+            result: OperationsInsights = llm.with_structured_output(OperationsInsights).invoke(prompt)
             return {"ops_insights": result}
         except Exception as e:
             error_str = str(e)

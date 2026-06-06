@@ -45,14 +45,15 @@ async def lifespan(app: FastAPI):
     import redis.asyncio as aioredis
     
     try:
+        import asyncio
         redis_client = aioredis.from_url(
             settings.REDIS_URL, 
             encoding="utf-8", 
             decode_responses=False,
-            socket_connect_timeout=2.0  # Fail fast if Redis is down
+            socket_connect_timeout=2.0
         )
-        # Ping to verify connection
-        await redis_client.ping()
+        # Ping to verify connection, force timeout
+        await asyncio.wait_for(redis_client.ping(), timeout=2.0)
         FastAPICache.init(RedisBackend(redis_client), prefix="fastapi-cache")
         print("[INFO] Redis cache initialized.")
     except Exception as exc:

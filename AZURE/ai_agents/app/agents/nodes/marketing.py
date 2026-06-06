@@ -25,16 +25,17 @@ def run_marketing_agent(state: SystemState) -> dict:
     # Extract real data (handle both global and per-product schemas)
     if "advertising_performance" in snapshot:
         # Product mode
-        dashboard_kpis = json.dumps(snapshot.get("profit_and_loss", {}), indent=2, default=str)
-        traffic_funnel = json.dumps(snapshot.get("advertising_performance", {}), indent=2, default=str)
-        revenue_by_mp = json.dumps(snapshot.get("revenue_by_marketplace", []), indent=2, default=str)
-        pricing_margins = json.dumps(snapshot.get("pricing_by_marketplace", []), indent=2, default=str)
+        dashboard_kpis = json.dumps(snapshot.get("profit_and_loss", {}), indent=2, default=str)[:800]
+        traffic_funnel = json.dumps(snapshot.get("advertising_performance", {}), indent=2, default=str)[:1000]
+        revenue_by_mp = json.dumps(snapshot.get("revenue_by_marketplace", []), indent=2, default=str)[:800]
+        pricing_margins = json.dumps(snapshot.get("pricing_by_marketplace", []), indent=2, default=str)[:800]
     else:
         # Global mode
-        dashboard_kpis = json.dumps(snapshot.get("dashboard_kpis", {}), indent=2, default=str)
-        traffic_funnel = json.dumps(snapshot.get("traffic_funnel", []), indent=2, default=str)
-        revenue_by_mp = json.dumps(snapshot.get("revenue_by_marketplace", []), indent=2, default=str)
-        pricing_margins = json.dumps(snapshot.get("pricing_margins", [])[:10], indent=2, default=str)
+        dashboard_kpis = json.dumps(snapshot.get("dashboard_kpis", {}), indent=2, default=str)[:800]
+        traffic_funnel = json.dumps(snapshot.get("traffic_funnel", [])[:5], indent=2, default=str)[:1000]
+        revenue_by_mp = json.dumps(snapshot.get("revenue_by_marketplace", []), indent=2, default=str)[:800]
+        pricing_margins = json.dumps(snapshot.get("pricing_margins", [])[:5], indent=2, default=str)[:800]
+
 
     try:
         recent_context = fetch_recent_context(seller_id, limit=3)
@@ -42,7 +43,7 @@ def run_marketing_agent(state: SystemState) -> dict:
         print(f"  ⚠️ Could not fetch Supabase context: {e}")
         recent_context = "No historical context available (Supabase unavailable)."
 
-    llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0.1)
+    llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.1)
     structured_llm = llm.with_structured_output(MarketingInsights)
 
     prompt = f"""
@@ -67,6 +68,12 @@ Each row shows: SKU, product_name, category, marketplace, total_impressions, tot
 {recent_context}
 
 YOUR ANALYSIS MUST:
+<thinking>
+1. Calculate ROAS for each row (revenue / ad_spend). Identify any under 2.0.
+2. Check CTRs. Below 1.5% is a listing problem.
+3. Check Conversion Rates. Below 2% is a page/price problem.
+4. Synthesize the total wasted spend.
+</thinking>
 
 1. **ROAS Audit — Kill the Losers**: Identify EVERY product × marketplace combination where ROAS < 2.0. For each:
    - Calculate exact wasted spend: total_ad_spend - (total_revenue_from_ads)
@@ -93,14 +100,14 @@ IMPORTANT: Every action in recommended_actions MUST include ALL required fields:
 """
 
     from app.utils import get_groq_api_key
-    llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0.0)
-
+    
     import time
     max_retries = 3
     for attempt in range(max_retries + 1):
         try:
             key = get_groq_api_key()
-            result: MarketingInsights = llm.with_config({"api_key": key}).with_structured_output(MarketingInsights).invoke(prompt)
+            llm = ChatGroq(api_key=key, model="llama-3.3-70b-versatile", temperature=0.0)
+            result: MarketingInsights = llm.with_structured_output(MarketingInsights).invoke(prompt)
             return {"marketing_insights": result}
         except Exception as e:
             error_str = str(e)

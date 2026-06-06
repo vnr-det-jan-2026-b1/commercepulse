@@ -26,16 +26,16 @@ def run_revenue_agent(state: SystemState) -> dict:
     # Handle both Global analysis schema and Per-Product analysis schema
     if "profit_and_loss" in snapshot:
         # We are in Product Analysis mode
-        dashboard_kpis = json.dumps(snapshot.get("profit_and_loss", {}), indent=2, default=str)
-        pricing_margins = json.dumps(snapshot.get("pricing_by_marketplace", []), indent=2, default=str)
-        revenue_by_mp = json.dumps(snapshot.get("revenue_by_marketplace", []), indent=2, default=str)
-        inventory_alerts = json.dumps(snapshot.get("inventory_health", {}), indent=2, default=str)
+        dashboard_kpis = json.dumps(snapshot.get("profit_and_loss", {}), indent=2, default=str)[:800]
+        pricing_margins = json.dumps(snapshot.get("pricing_by_marketplace", []), indent=2, default=str)[:800]
+        revenue_by_mp = json.dumps(snapshot.get("revenue_by_marketplace", []), indent=2, default=str)[:800]
+        inventory_alerts = json.dumps(snapshot.get("inventory_health", {}), indent=2, default=str)[:800]
     else:
         # We are in Global Analysis mode
-        dashboard_kpis = json.dumps(snapshot.get("dashboard_kpis", {}), indent=2, default=str)
-        pricing_margins = json.dumps(snapshot.get("pricing_margins", [])[:15], indent=2, default=str)
-        revenue_by_mp = json.dumps(snapshot.get("revenue_by_marketplace", []), indent=2, default=str)
-        inventory_alerts = json.dumps(snapshot.get("inventory_alerts", [])[:10], indent=2, default=str)
+        dashboard_kpis = json.dumps(snapshot.get("dashboard_kpis", {}), indent=2, default=str)[:800]
+        pricing_margins = json.dumps(snapshot.get("pricing_margins", [])[:5], indent=2, default=str)[:800]
+        revenue_by_mp = json.dumps(snapshot.get("revenue_by_marketplace", []), indent=2, default=str)[:800]
+        inventory_alerts = json.dumps(snapshot.get("inventory_alerts", [])[:5], indent=2, default=str)[:800]
 
     # Also fetch vector context for historical trends
     try:
@@ -45,7 +45,7 @@ def run_revenue_agent(state: SystemState) -> dict:
         recent_context = "No historical context available (Supabase unavailable)."
 
     from app.utils import get_groq_api_key
-    llm = ChatGroq(api_key=get_groq_api_key(), model="llama-3.1-8b-instant", temperature=0.0)
+    llm = ChatGroq(api_key=get_groq_api_key(), model="llama-3.3-70b-versatile", temperature=0.0)
     structured_llm = llm.with_structured_output(RevenueInsights)
 
     prompt = f"""
@@ -71,6 +71,12 @@ Products currently out of stock or below reorder threshold (these represent LOST
 {recent_context}
 
 YOUR ANALYSIS MUST:
+<thinking>
+1. Scan pricing_margins for any row with margin_pct < 15%. Calculate the lost margin value.
+2. Check inventory_alerts. If a top product is OOS, calculate daily lost sales (selling_price * avg daily orders).
+3. Find products with high discount_percentage where commission is already high.
+4. Formulate pricing/discount reduction strategies.
+</thinking>
 
 1. **Identify Margin Killers**: Which specific products have margin_pct below 15%? Why? Is it commission, discount, or cost price? For each, calculate the exact margin gap.
 
@@ -88,13 +94,13 @@ IMPORTANT: Every action in recommended_actions MUST include ALL required fields:
 """
 
     from app.utils import get_groq_api_key
-    llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0.0)
-
+    
     max_retries = 3
     for attempt in range(max_retries + 1):
         try:
             key = get_groq_api_key()
-            result: RevenueInsights = llm.with_config({"api_key": key}).with_structured_output(RevenueInsights).invoke(prompt)
+            llm = ChatGroq(api_key=key, model="llama-3.3-70b-versatile", temperature=0.0)
+            result: RevenueInsights = llm.with_structured_output(RevenueInsights).invoke(prompt)
             return {"revenue_insights": result}
         except Exception as e:
             error_str = str(e)

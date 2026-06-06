@@ -6,11 +6,14 @@ from app.core.config import settings
 
 engine = create_async_engine(
     settings.async_db_url,
-    pool_size=10,
-    max_overflow=20,
+    pool_size=2,
+    max_overflow=3,
     pool_pre_ping=True, # Automatically checks if connection is alive before using it
     pool_recycle=1800,  # Recycle connections after 30 minutes to prevent timeouts
     echo=settings.APP_ENV == "development",
+    connect_args={
+        "statement_cache_size": 0
+    }
 )
 
 AsyncSessionLocal = async_sessionmaker(

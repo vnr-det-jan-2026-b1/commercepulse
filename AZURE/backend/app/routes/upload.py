@@ -200,15 +200,21 @@ async def upload_full(
                 raise HTTPException(400, f"Failed to read CSV: {e}")
                 
         else:
-            # Excel file processing (avoid re-serializing to bytes)
-            xl = pd.ExcelFile(io.BytesIO(content), engine="openpyxl")
+            # Excel file processing (offload to thread pool to avoid blocking event loop)
+            from fastapi.concurrency import run_in_threadpool
+            
+            def _parse_excel_sync(bytes_content):
+                return pd.ExcelFile(io.BytesIO(bytes_content), engine="openpyxl")
+            
+            xl = await run_in_threadpool(_parse_excel_sync, content)
             sheet_names_lower = {s.strip().lower(): s for s in xl.sheet_names}
             found_any = False
             
             for domain, fn in DOMAIN_MAP.items():
                 if domain in sheet_names_lower:
                     found_any = True
-                    sheet_df = xl.parse(sheet_names_lower[domain])
+                    # Parsing sheets can also be slow, offload it
+                    sheet_df = await run_in_threadpool(xl.parse, sheet_names_lower[domain])
                     results[domain] = await fn(db, sheet_df, seller_id, snap_date)
 
             if not found_any and len(xl.sheet_names) == 1:
