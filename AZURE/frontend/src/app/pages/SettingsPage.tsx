@@ -1,5 +1,6 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, createContext, useContext } from "react";
 import { toast, Toaster } from "sonner";
+import { useTheme } from "next-themes";
 import {
   User,
   Bell,
@@ -34,23 +35,77 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+/* ─── Translations ─── */
+const translations: Record<string, Record<string, string>> = {
+  en: {
+    title: "Settings",
+    subtitle: "Manage your account settings and preferences",
+    profile: "Profile",
+    account: "Account",
+    notifications: "Notifications",
+    billing: "Billing",
+    team: "Team",
+    integrations: "Integrations",
+    appearance: "Appearance",
+    security: "Security",
+    saveChanges: "Save Changes",
+    cancel: "Cancel",
+  },
+  hi: {
+    title: "सेटिंग्स",
+    subtitle: "अपने खाता सेटिंग्स और प्राथमिकताओं को प्रबंधित करें",
+    profile: "प्रोफ़ाइल",
+    account: "खाता",
+    notifications: "सूचनाएं",
+    billing: "बिलिंग",
+    team: "टीम",
+    integrations: "एकीकरण",
+    appearance: "दिखावट",
+    security: "सुरक्षा",
+    saveChanges: "परिवर्तन सहेजें",
+    cancel: "रद्द करें",
+  },
+  es: {
+    title: "Ajustes",
+    subtitle: "Administre la configuración y preferencias de su cuenta",
+    profile: "Perfil",
+    account: "Cuenta",
+    notifications: "Notificaciones",
+    billing: "Facturación",
+    team: "Equipo",
+    integrations: "Integraciones",
+    appearance: "Apariencia",
+    security: "Seguridad",
+    saveChanges: "Guardar cambios",
+    cancel: "Cancelar",
+  }
+};
+
+const LanguageContext = createContext({
+  language: "en",
+  setLanguage: (lang: string) => {},
+  t: (key: string) => key,
+});
+
+const useLang = () => useContext(LanguageContext);
+
 /* ─── Tab registry ─── */
-const tabs: { id: string; label: string; icon: LucideIcon }[] = [
-  { id: "profile", label: "Profile", icon: User },
-  { id: "account", label: "Account", icon: Lock },
-  { id: "notifications", label: "Notifications", icon: Bell },
-  { id: "billing", label: "Billing", icon: CreditCard },
-  { id: "team", label: "Team", icon: Users },
-  { id: "integrations", label: "Integrations", icon: Globe },
-  { id: "appearance", label: "Appearance", icon: Palette },
-  { id: "security", label: "Security", icon: Shield },
+const getTabs = (t: (k: string) => string): { id: string; label: string; icon: LucideIcon }[] => [
+  { id: "profile", label: t("profile"), icon: User },
+  { id: "account", label: t("account"), icon: Lock },
+  { id: "notifications", label: t("notifications"), icon: Bell },
+  { id: "billing", label: t("billing"), icon: CreditCard },
+  { id: "team", label: t("team"), icon: Users },
+  { id: "integrations", label: t("integrations"), icon: Globe },
+  { id: "appearance", label: t("appearance"), icon: Palette },
+  { id: "security", label: t("security"), icon: Shield },
 ];
 
 /* ─────────────────────── Shared Helpers ─────────────────────── */
 
 function SettingsCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`bg-white rounded-2xl p-8 shadow-sm border border-gray-100 ${className}`}>
+    <div className={`bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-sm border border-gray-100 dark:border-gray-700 ${className}`}>
       {children}
     </div>
   );
@@ -59,35 +114,36 @@ function SettingsCard({ children, className = "" }: { children: React.ReactNode;
 function SectionTitle({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
     <div className="mb-6">
-      <h2 className="text-2xl font-semibold text-gray-900">{title}</h2>
-      {subtitle && <p className="text-gray-500 mt-1">{subtitle}</p>}
+      <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">{title}</h2>
+      {subtitle && <p className="text-gray-500 dark:text-gray-400 mt-1">{subtitle}</p>}
     </div>
   );
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <label className="block text-sm font-medium text-gray-700 mb-2">{children}</label>;
+  return <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{children}</label>;
 }
 
 const inputClass =
-  "w-full px-4 py-3 border border-gray-200 rounded-xl bg-gray-50/60 focus:bg-white focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all text-gray-900 placeholder:text-gray-400";
+  "w-full px-4 py-3 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50/60 dark:bg-gray-700/50 focus:bg-white dark:focus:bg-gray-800 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all text-gray-900 dark:text-white placeholder:text-gray-400";
 
 function SaveCancelBar({ onSave, onCancel, saving = false }: { onSave: () => void; onCancel: () => void; saving?: boolean }) {
+  const { t } = useLang();
   return (
-    <div className="flex justify-end gap-3 pt-6 border-t border-gray-100 mt-6">
+    <div className="flex justify-end gap-3 pt-6 border-t border-gray-100 dark:border-gray-700 mt-6">
       <button
         onClick={onCancel}
-        className="px-6 py-2.5 border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 font-medium transition-all"
+        className="px-6 py-2.5 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 font-medium transition-all"
       >
-        Cancel
+        {t("cancel")}
       </button>
       <button
         onClick={onSave}
         disabled={saving}
-        className="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl font-medium transition-all shadow-md shadow-purple-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+        className="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl font-medium transition-all shadow-md shadow-purple-200 dark:shadow-none disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
       >
         {saving && <RefreshCw className="w-4 h-4 animate-spin" />}
-        {saving ? "Saving..." : "Save Changes"}
+        {saving ? "Saving..." : t("saveChanges")}
       </button>
     </div>
   );
@@ -113,7 +169,7 @@ function Toggle({
       aria-checked={enabled}
       onClick={() => onChange(!enabled)}
       className={`relative ${dims} rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-offset-2 ${
-        enabled ? "bg-purple-600" : "bg-gray-300"
+        enabled ? "bg-purple-600" : "bg-gray-300 dark:bg-gray-600"
       }`}
     >
       <span
@@ -146,18 +202,18 @@ function ConfirmModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4 animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4 animate-in fade-in zoom-in-95 duration-200 border dark:border-gray-700">
         <div className="flex items-start gap-4 mb-6">
-          <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${danger ? "bg-red-100" : "bg-purple-100"}`}>
-            <AlertTriangle className={`w-6 h-6 ${danger ? "text-red-600" : "text-purple-600"}`} />
+          <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${danger ? "bg-red-100 dark:bg-red-900/30" : "bg-purple-100 dark:bg-purple-900/30"}`}>
+            <AlertTriangle className={`w-6 h-6 ${danger ? "text-red-600 dark:text-red-400" : "text-purple-600 dark:text-purple-400"}`} />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
-            <p className="text-gray-500 mt-1 text-sm">{description}</p>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
+            <p className="text-gray-500 dark:text-gray-400 mt-1 text-sm">{description}</p>
           </div>
         </div>
         <div className="flex justify-end gap-3">
-          <button onClick={onClose} className="px-5 py-2.5 border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 font-medium transition-all">
+          <button onClick={onClose} className="px-5 py-2.5 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 font-medium transition-all">
             Cancel
           </button>
           <button
@@ -178,21 +234,27 @@ function ConfirmModal({
 
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState("profile");
+  const [language, setLanguage] = useState("en");
+
+  const t = useCallback((key: string) => {
+    const langDict = translations[language] || translations["en"];
+    return langDict[key] || translations["en"][key] || key;
+  }, [language]);
 
   return (
-    <>
-      <Toaster position="top-right" richColors closeButton />
+    <LanguageContext.Provider value={{ language, setLanguage, t }}>
+      <Toaster position="top-right" richColors closeButton theme={useTheme().resolvedTheme as "light" | "dark" | "system"} />
 
       <div className="mb-8">
-        <h1 className="text-3xl font-semibold text-gray-900">Settings</h1>
-        <p className="text-gray-500 mt-2">Manage your account settings and preferences</p>
+        <h1 className="text-3xl font-semibold text-gray-900 dark:text-white">{t("title")}</h1>
+        <p className="text-gray-500 dark:text-gray-400 mt-2">{t("subtitle")}</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
         {/* Sidebar */}
         <div className="lg:col-span-1">
-          <nav className="bg-white rounded-2xl p-3 shadow-sm border border-gray-100 space-y-0.5 sticky top-6">
-            {tabs.map((tab) => {
+          <nav className="bg-white dark:bg-gray-800 rounded-2xl p-3 shadow-sm border border-gray-100 dark:border-gray-700 space-y-0.5 sticky top-6">
+            {getTabs(t).map((tab) => {
               const Icon = tab.icon;
               const active = activeTab === tab.id;
               return (
@@ -201,11 +263,11 @@ export function SettingsPage() {
                   onClick={() => setActiveTab(tab.id)}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
                     active
-                      ? "bg-gradient-to-r from-purple-50 to-indigo-50 text-purple-700 shadow-sm"
-                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                      ? "bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 text-purple-700 dark:text-purple-400 shadow-sm"
+                      : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white"
                   }`}
                 >
-                  <Icon className={`w-5 h-5 ${active ? "text-purple-600" : ""}`} />
+                  <Icon className={`w-5 h-5 ${active ? "text-purple-600 dark:text-purple-400" : ""}`} />
                   <span className="font-medium text-sm">{tab.label}</span>
                 </button>
               );
@@ -225,7 +287,7 @@ export function SettingsPage() {
           {activeTab === "security" && <SecurityTab />}
         </div>
       </div>
-    </>
+    </LanguageContext.Provider>
   );
 }
 
@@ -248,6 +310,8 @@ function ProfileTab() {
   const [profile, setProfile] = useState({ ...defaultProfile });
   const [saving, setSaving] = useState(false);
   const [avatarHover, setAvatarHover] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const update = (field: string, value: string) => setProfile((p) => ({ ...p, [field]: value }));
 
@@ -259,7 +323,19 @@ function ProfileTab() {
     }, 800);
   }, []);
 
-  const handleCancel = () => setProfile({ ...defaultProfile });
+  const handleCancel = () => {
+    setProfile({ ...defaultProfile });
+    setAvatarUrl(null);
+  };
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      const url = URL.createObjectURL(file);
+      setAvatarUrl(url);
+      toast.success("Profile photo updated");
+    }
+  };
 
   return (
     <SettingsCard>
@@ -270,16 +346,28 @@ function ProfileTab() {
         <div>
           <FieldLabel>Profile Photo</FieldLabel>
           <div className="flex items-center gap-5">
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              className="hidden" 
+              accept="image/*"
+              onChange={handlePhotoUpload} 
+            />
             <div
-              className="relative w-20 h-20 rounded-full cursor-pointer group"
+              className="relative w-20 h-20 rounded-full cursor-pointer group bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-200 dark:shadow-none overflow-hidden"
               onMouseEnter={() => setAvatarHover(true)}
               onMouseLeave={() => setAvatarHover(false)}
+              onClick={() => fileInputRef.current?.click()}
             >
-              <div className="w-20 h-20 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full flex items-center justify-center text-white text-2xl font-semibold shadow-lg shadow-purple-200">
-                {profile.firstName[0]}{profile.lastName[0]}
-              </div>
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-white text-2xl font-semibold">
+                  {profile.firstName[0]}{profile.lastName[0]}
+                </span>
+              )}
               {avatarHover && (
-                <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center transition-opacity">
+                <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center transition-opacity">
                   <Upload className="w-5 h-5 text-white" />
                 </div>
               )}
@@ -287,7 +375,7 @@ function ProfileTab() {
             <div>
               <button
                 className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
-                onClick={() => toast.info("Photo upload", { description: "File picker would open here." })}
+                onClick={() => fileInputRef.current?.click()}
               >
                 Upload Photo
               </button>
@@ -362,7 +450,7 @@ function ProfileTab() {
    ═══════════════════════════════════════════════════════════════ */
 
 function getPasswordStrength(pwd: string): { label: string; color: string; pct: number } {
-  if (!pwd) return { label: "", color: "bg-gray-200", pct: 0 };
+  if (!pwd) return { label: "", color: "bg-gray-200 dark:bg-gray-700", pct: 0 };
   let score = 0;
   if (pwd.length >= 8) score++;
   if (pwd.length >= 12) score++;
@@ -377,6 +465,7 @@ function getPasswordStrength(pwd: string): { label: string; color: string; pct: 
 }
 
 function AccountTab() {
+  const { language, setLanguage } = useLang();
   const [currentPwd, setCurrentPwd] = useState("");
   const [newPwd, setNewPwd] = useState("");
   const [confirmPwd, setConfirmPwd] = useState("");
@@ -384,7 +473,6 @@ function AccountTab() {
   const [showNew, setShowNew] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [deleteModal, setDeleteModal] = useState(false);
-  const [language, setLanguage] = useState("en");
   const [timezone, setTimezone] = useState("America/Los_Angeles");
 
   const strength = getPasswordStrength(newPwd);
@@ -415,7 +503,7 @@ function AccountTab() {
         <button
           type="button"
           onClick={onToggle}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
         >
           {show ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
         </button>
@@ -435,11 +523,11 @@ function AccountTab() {
           {/* Strength Meter */}
           {newPwd && (
             <div className="space-y-1.5">
-              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                 <div className={`h-full ${strength.color} rounded-full transition-all duration-300`} style={{ width: `${strength.pct}%` }} />
               </div>
-              <p className="text-xs text-gray-500">
-                Password strength: <span className="font-medium">{strength.label}</span>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Password strength: <span className="font-medium text-gray-700 dark:text-gray-300">{strength.label}</span>
               </p>
             </div>
           )}
@@ -448,19 +536,19 @@ function AccountTab() {
 
           {/* Match indicator */}
           {passwordsMatch && (
-            <div className="flex items-center gap-1.5 text-green-600 text-sm">
+            <div className="flex items-center gap-1.5 text-green-600 dark:text-green-400 text-sm">
               <CheckCircle className="w-4 h-4" /> Passwords match
             </div>
           )}
           {passwordsMismatch && (
-            <div className="flex items-center gap-1.5 text-red-500 text-sm">
+            <div className="flex items-center gap-1.5 text-red-500 dark:text-red-400 text-sm">
               <X className="w-4 h-4" /> Passwords do not match
             </div>
           )}
 
           <button
             onClick={handlePasswordUpdate}
-            className="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl font-medium transition-all shadow-md shadow-purple-200"
+            className="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl font-medium transition-all shadow-md shadow-purple-200 dark:shadow-none"
           >
             Update Password
           </button>
@@ -497,13 +585,13 @@ function AccountTab() {
       </SettingsCard>
 
       {/* Danger Zone */}
-      <SettingsCard className="border-2 !border-red-100">
+      <SettingsCard className="border-2 !border-red-100 dark:!border-red-900/30">
         <SectionTitle title="Danger Zone" />
-        <div className="flex items-start gap-4 p-5 bg-red-50/60 rounded-xl">
-          <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
+        <div className="flex items-start gap-4 p-5 bg-red-50/60 dark:bg-red-900/20 rounded-xl">
+          <AlertTriangle className="w-5 h-5 text-red-500 dark:text-red-400 mt-0.5 shrink-0" />
           <div className="flex-1">
-            <p className="font-medium text-gray-900">Delete Account</p>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="font-medium text-gray-900 dark:text-white">Delete Account</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
               Once you delete your account, all data will be permanently removed. This action cannot be undone.
             </p>
           </div>
@@ -553,10 +641,10 @@ function NotificationsTab() {
   const toggle = (key: keyof typeof prefs) => setPrefs((p) => ({ ...p, [key]: !p[key] }));
 
   const NotifRow = ({ label, desc, field }: { label: string; desc: string; field: keyof typeof prefs }) => (
-    <div className="flex items-center justify-between py-3.5 border-b border-gray-50 last:border-b-0">
+    <div className="flex items-center justify-between py-3.5 border-b border-gray-50 dark:border-gray-700 last:border-b-0">
       <div>
-        <p className="font-medium text-gray-900 text-sm">{label}</p>
-        <p className="text-xs text-gray-500 mt-0.5">{desc}</p>
+        <p className="font-medium text-gray-900 dark:text-gray-100 text-sm">{label}</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{desc}</p>
       </div>
       <Toggle enabled={prefs[field]} onChange={() => toggle(field)} />
     </div>
@@ -577,8 +665,8 @@ function NotificationsTab() {
 
         {/* Email */}
         <div className="mb-8">
-          <h3 className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
-            <Mail className="w-5 h-5 text-purple-600" /> Email Notifications
+          <h3 className="font-semibold text-gray-900 dark:text-white mb-1 flex items-center gap-2">
+            <Mail className="w-5 h-5 text-purple-600 dark:text-purple-400" /> Email Notifications
           </h3>
           <div className="ml-7 mt-3">
             <NotifRow label="Order updates" desc="New orders, fulfillment & delivery updates" field="orderUpdates" />
@@ -591,8 +679,8 @@ function NotificationsTab() {
 
         {/* Push */}
         <div className="mb-8">
-          <h3 className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
-            <Smartphone className="w-5 h-5 text-purple-600" /> Push Notifications
+          <h3 className="font-semibold text-gray-900 dark:text-white mb-1 flex items-center gap-2">
+            <Smartphone className="w-5 h-5 text-purple-600 dark:text-purple-400" /> Push Notifications
           </h3>
           <div className="ml-7 mt-3">
             <NotifRow label="Critical alerts" desc="Urgent issues requiring immediate attention" field="criticalAlerts" />
@@ -604,8 +692,8 @@ function NotificationsTab() {
 
         {/* Frequency */}
         <div className="mb-6">
-          <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-            <Clock className="w-5 h-5 text-purple-600" /> Delivery Frequency
+          <h3 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+            <Clock className="w-5 h-5 text-purple-600 dark:text-purple-400" /> Delivery Frequency
           </h3>
           <div className="grid grid-cols-3 gap-3 ml-7">
             {[
@@ -618,12 +706,12 @@ function NotificationsTab() {
                 onClick={() => setFrequency(opt.id)}
                 className={`p-4 rounded-xl border-2 text-left transition-all ${
                   frequency === opt.id
-                    ? "border-purple-500 bg-purple-50"
-                    : "border-gray-200 hover:border-purple-200"
+                    ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20"
+                    : "border-gray-200 dark:border-gray-700 hover:border-purple-200 dark:hover:border-purple-700"
                 }`}
               >
-                <p className="font-medium text-gray-900 text-sm">{opt.label}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{opt.desc}</p>
+                <p className="font-medium text-gray-900 dark:text-gray-100 text-sm">{opt.label}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{opt.desc}</p>
               </button>
             ))}
           </div>
@@ -631,21 +719,21 @@ function NotificationsTab() {
 
         {/* Quiet Hours */}
         <div className="mb-2">
-          <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-            <Moon className="w-5 h-5 text-purple-600" /> Quiet Hours
+          <h3 className="font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+            <Moon className="w-5 h-5 text-purple-600 dark:text-purple-400" /> Quiet Hours
           </h3>
           <div className="flex items-center gap-4 ml-7">
             <div>
               <FieldLabel>From</FieldLabel>
               <input type="time" value={quietStart} onChange={(e) => setQuietStart(e.target.value)} className={inputClass + " w-36"} />
             </div>
-            <span className="mt-6 text-gray-400">—</span>
+            <span className="mt-6 text-gray-400 dark:text-gray-500">—</span>
             <div>
               <FieldLabel>To</FieldLabel>
               <input type="time" value={quietEnd} onChange={(e) => setQuietEnd(e.target.value)} className={inputClass + " w-36"} />
             </div>
           </div>
-          <p className="text-xs text-gray-400 mt-2 ml-7">Non-critical notifications are silenced during quiet hours.</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-2 ml-7">Non-critical notifications are silenced during quiet hours.</p>
         </div>
 
         <SaveCancelBar onSave={handleSave} onCancel={() => {}} saving={saving} />
@@ -692,7 +780,7 @@ function BillingTab() {
               <div
                 key={plan.id}
                 className={`relative p-6 rounded-xl border-2 transition-all ${
-                  isCurrent ? "border-purple-500 bg-purple-50/50 shadow-md shadow-purple-100" : "border-gray-200 hover:border-purple-200"
+                  isCurrent ? "border-purple-500 bg-purple-50/50 dark:bg-purple-900/20 shadow-md shadow-purple-100 dark:shadow-none" : "border-gray-200 dark:border-gray-700 hover:border-purple-200 dark:hover:border-purple-700"
                 }`}
               >
                 {plan.badge && (
@@ -702,14 +790,14 @@ function BillingTab() {
                     {plan.badge}
                   </span>
                 )}
-                <h3 className="text-lg font-semibold text-gray-900 mt-1">{plan.name}</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mt-1">{plan.name}</h3>
                 <div className="mt-2 mb-4">
-                  <span className="text-3xl font-bold text-gray-900">{plan.price}</span>
-                  <span className="text-gray-500 text-sm">{plan.period}</span>
+                  <span className="text-3xl font-bold text-gray-900 dark:text-white">{plan.price}</span>
+                  <span className="text-gray-500 dark:text-gray-400 text-sm">{plan.period}</span>
                 </div>
                 <ul className="space-y-2 mb-6">
                   {plan.features.map((f, i) => (
-                    <li key={i} className="flex items-center gap-2 text-sm text-gray-600">
+                    <li key={i} className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
                       <CheckCircle className="w-4 h-4 text-green-500 shrink-0" /> {f}
                     </li>
                   ))}
@@ -723,7 +811,7 @@ function BillingTab() {
                   }}
                   className={`w-full py-2.5 rounded-xl font-medium text-sm transition-all ${
                     isCurrent
-                      ? "bg-purple-100 text-purple-700 cursor-default"
+                      ? "bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400 cursor-default"
                       : "bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-sm"
                   }`}
                 >
@@ -744,12 +832,12 @@ function BillingTab() {
             return (
               <div key={item.label}>
                 <div className="flex justify-between text-sm mb-1.5">
-                  <span className="font-medium text-gray-700">{item.label}</span>
-                  <span className="text-gray-500">
+                  <span className="font-medium text-gray-700 dark:text-gray-300">{item.label}</span>
+                  <span className="text-gray-500 dark:text-gray-400">
                     {item.unit ? `${item.used} ${item.unit}` : item.used.toLocaleString()} / {item.unit ? `${item.total} ${item.unit}` : item.total.toLocaleString()}
                   </span>
                 </div>
-                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                   <div className={`h-full ${item.color} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
                 </div>
               </div>
@@ -761,19 +849,19 @@ function BillingTab() {
       {/* Payment Method */}
       <SettingsCard>
         <SectionTitle title="Payment Method" />
-        <div className="flex items-center justify-between p-5 bg-gradient-to-r from-gray-50 to-blue-50/30 rounded-xl border border-gray-100">
+        <div className="flex items-center justify-between p-5 bg-gradient-to-r from-gray-50 to-blue-50/30 dark:from-gray-800 dark:to-gray-800 rounded-xl border border-gray-100 dark:border-gray-700">
           <div className="flex items-center gap-4">
             <div className="w-14 h-10 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-lg flex items-center justify-center shadow-sm">
               <CreditCard className="w-6 h-6 text-white" />
             </div>
             <div>
-              <p className="font-semibold text-gray-900">Visa •••• 4242</p>
-              <p className="text-sm text-gray-500">Expires 12/2026</p>
+              <p className="font-semibold text-gray-900 dark:text-white">Visa •••• 4242</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Expires 12/2026</p>
             </div>
           </div>
           <button
             onClick={() => toast.info("Payment method", { description: "Payment form would open here." })}
-            className="px-5 py-2 border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 font-medium transition-colors text-sm"
+            className="px-5 py-2 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 font-medium transition-colors text-sm"
           >
             Update Card
           </button>
@@ -785,19 +873,19 @@ function BillingTab() {
         <SectionTitle title="Billing History" />
         <div className="space-y-2">
           {invoices.map((inv) => (
-            <div key={inv.id} className="flex items-center justify-between p-4 hover:bg-gray-50 rounded-xl transition-colors group">
+            <div key={inv.id} className="flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-xl transition-colors group">
               <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
+                <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
+                  <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-500" />
                 </div>
                 <div>
-                  <p className="font-medium text-gray-900 text-sm">{inv.id}</p>
-                  <p className="text-xs text-gray-500">{inv.date} • {inv.amount}</p>
+                  <p className="font-medium text-gray-900 dark:text-white text-sm">{inv.id}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{inv.date} • {inv.amount}</p>
                 </div>
               </div>
               <button
                 onClick={() => toast.success(`Downloading ${inv.id}...`)}
-                className="flex items-center gap-1.5 text-purple-600 hover:text-purple-700 font-medium text-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                className="flex items-center gap-1.5 text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 font-medium text-sm opacity-0 group-hover:opacity-100 transition-opacity"
               >
                 <Download className="w-4 h-4" /> Download
               </button>
@@ -865,12 +953,12 @@ function TeamTab() {
       <SettingsCard>
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-2xl font-semibold text-gray-900">Team Members</h2>
-            <p className="text-gray-500 mt-1">Manage your team and their permissions</p>
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">Team Members</h2>
+            <p className="text-gray-500 dark:text-gray-400 mt-1">Manage your team and their permissions</p>
           </div>
           <button
             onClick={() => setShowInvite(true)}
-            className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl font-medium transition-all shadow-md shadow-purple-200 flex items-center gap-2"
+            className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl font-medium transition-all shadow-md shadow-purple-200 dark:shadow-none flex items-center gap-2"
           >
             <Plus className="w-4 h-4" /> Invite Member
           </button>
@@ -878,8 +966,8 @@ function TeamTab() {
 
         {/* Invite Form */}
         {showInvite && (
-          <div className="p-5 bg-purple-50/60 rounded-xl border border-purple-100 mb-6 animate-in fade-in slide-in-from-top-2 duration-200">
-            <h3 className="font-semibold text-gray-900 mb-3">Send Invitation</h3>
+          <div className="p-5 bg-purple-50/60 dark:bg-purple-900/20 rounded-xl border border-purple-100 dark:border-purple-800/50 mb-6 animate-in fade-in slide-in-from-top-2 duration-200">
+            <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Send Invitation</h3>
             <div className="flex gap-3">
               <input
                 type="email"
@@ -896,7 +984,7 @@ function TeamTab() {
               <button onClick={handleInvite} className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-medium transition-colors shrink-0">
                 Send
               </button>
-              <button onClick={() => setShowInvite(false)} className="px-3 py-2.5 text-gray-500 hover:text-gray-700 transition-colors shrink-0">
+              <button onClick={() => setShowInvite(false)} className="px-3 py-2.5 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors shrink-0">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -906,19 +994,19 @@ function TeamTab() {
         {/* Members List */}
         <div className="space-y-2">
           {members.map((member, idx) => (
-            <div key={member.id} className="flex items-center justify-between p-4 hover:bg-gray-50 rounded-xl transition-colors group">
+            <div key={member.id} className="flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-xl transition-colors group">
               <div className="flex items-center gap-4">
                 <div className={`w-12 h-12 bg-gradient-to-br ${gradients[idx % gradients.length]} rounded-full flex items-center justify-center text-white font-semibold shadow-sm`}>
                   {member.avatar}
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <p className="font-semibold text-gray-900">{member.name}</p>
+                    <p className="font-semibold text-gray-900 dark:text-white">{member.name}</p>
                     {member.role === "Owner" && (
-                      <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">Owner</span>
+                      <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-500 rounded-full text-xs font-medium">Owner</span>
                     )}
                   </div>
-                  <p className="text-sm text-gray-500">{member.email}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">{member.email}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -926,7 +1014,7 @@ function TeamTab() {
                   value={member.role}
                   onChange={(e) => handleRoleChange(member.id, e.target.value)}
                   disabled={member.role === "Owner"}
-                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-400 disabled:opacity-50 disabled:cursor-not-allowed bg-white"
+                  className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-sm focus:ring-2 focus:ring-purple-400 disabled:opacity-50 disabled:cursor-not-allowed bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                 >
                   <option>Owner</option>
                   <option>Admin</option>
@@ -936,7 +1024,7 @@ function TeamTab() {
                 {member.role !== "Owner" && (
                   <button
                     onClick={() => setRemoveModal({ open: true, memberId: member.id })}
-                    className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                    className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -953,26 +1041,26 @@ function TeamTab() {
           <SectionTitle title="Pending Invitations" />
           <div className="space-y-2">
             {pendingInvites.map((invite) => (
-              <div key={invite.id} className="flex items-center justify-between p-4 bg-amber-50/50 rounded-xl border border-amber-100">
+              <div key={invite.id} className="flex items-center justify-between p-4 bg-amber-50/50 dark:bg-amber-900/10 rounded-xl border border-amber-100 dark:border-amber-900/30">
                 <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
-                    <Mail className="w-5 h-5 text-amber-600" />
+                  <div className="w-10 h-10 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center">
+                    <Mail className="w-5 h-5 text-amber-600 dark:text-amber-500" />
                   </div>
                   <div>
-                    <p className="font-medium text-gray-900 text-sm">{invite.email}</p>
-                    <p className="text-xs text-gray-500">{invite.role} • Sent {invite.sentAt}</p>
+                    <p className="font-medium text-gray-900 dark:text-white text-sm">{invite.email}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{invite.role} • Sent {invite.sentAt}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => { cancelInvite(invite.id); }}
-                    className="px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium transition-colors"
+                    className="px-3 py-1.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg text-sm font-medium transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={() => toast.success("Invitation resent")}
-                    className="px-3 py-1.5 text-purple-600 hover:bg-purple-50 rounded-lg text-sm font-medium transition-colors"
+                    className="px-3 py-1.5 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded-lg text-sm font-medium transition-colors"
                   >
                     Resend
                   </button>
@@ -1041,7 +1129,7 @@ function IntegrationsTab() {
     <div className="space-y-6">
       {categories.map((cat) => (
         <SettingsCard key={cat}>
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">{cat}</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">{cat}</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {integrations
               .filter((i) => i.category === cat)
@@ -1049,15 +1137,15 @@ function IntegrationsTab() {
                 <div
                   key={integration.id}
                   className={`p-5 border-2 rounded-xl transition-all ${
-                    integration.connected ? "border-green-200 bg-green-50/30" : "border-gray-200 hover:border-purple-200"
+                    integration.connected ? "border-green-200 dark:border-green-900/50 bg-green-50/30 dark:bg-green-900/10" : "border-gray-200 dark:border-gray-700 hover:border-purple-200 dark:hover:border-purple-700"
                   }`}
                 >
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3">
                       <span className="text-3xl">{integration.icon}</span>
                       <div>
-                        <h4 className="font-semibold text-gray-900">{integration.name}</h4>
-                        <p className="text-xs text-gray-500 mt-0.5">{integration.description}</p>
+                        <h4 className="font-semibold text-gray-900 dark:text-white">{integration.name}</h4>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{integration.description}</p>
                       </div>
                     </div>
                   </div>
@@ -1065,7 +1153,7 @@ function IntegrationsTab() {
                     onClick={() => toggleConnection(integration.id)}
                     className={`w-full py-2.5 rounded-xl font-medium text-sm transition-all flex items-center justify-center gap-2 ${
                       integration.connected
-                        ? "bg-green-100 text-green-700 border border-green-200 hover:bg-red-50 hover:text-red-600 hover:border-red-200"
+                        ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600 hover:border-red-200"
                         : "bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-sm"
                     }`}
                   >
@@ -1085,7 +1173,7 @@ function IntegrationsTab() {
       <SettingsCard>
         <SectionTitle title="Webhook URL" subtitle="Use this URL to receive real-time event notifications" />
         <div className="flex items-center gap-3">
-          <div className="flex-1 px-4 py-3 bg-gray-50 rounded-xl font-mono text-sm text-gray-600 border border-gray-200 truncate">
+          <div className="flex-1 px-4 py-3 bg-gray-50 dark:bg-gray-700 rounded-xl font-mono text-sm text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600 truncate">
             {webhookUrl}
           </div>
           <button
@@ -1105,7 +1193,7 @@ function IntegrationsTab() {
    ═══════════════════════════════════════════════════════════════ */
 
 function AppearanceTab() {
-  const [theme, setTheme] = useState<"light" | "dark" | "auto">("light");
+  const { theme, setTheme } = useTheme();
   const [accent, setAccent] = useState(0);
   const [fontSize, setFontSize] = useState<"small" | "default" | "large">("default");
   const [density, setDensity] = useState<"compact" | "comfortable" | "spacious">("comfortable");
@@ -1124,7 +1212,7 @@ function AppearanceTab() {
   const themes = [
     { id: "light" as const, label: "Light", icon: Sun, preview: "bg-white border-gray-200" },
     { id: "dark" as const, label: "Dark", icon: Moon, preview: "bg-gray-900 border-gray-700" },
-    { id: "auto" as const, label: "System", icon: Monitor, preview: "bg-gradient-to-r from-white to-gray-900 border-gray-300" },
+    { id: "system" as const, label: "System", icon: Monitor, preview: "bg-gradient-to-r from-white to-gray-900 border-gray-300" },
   ];
 
   const handleSave = () => {
@@ -1147,15 +1235,18 @@ function AppearanceTab() {
             return (
               <button
                 key={t.id}
-                onClick={() => setTheme(t.id)}
+                onClick={() => {
+                  setTheme(t.id);
+                  toast.success(`Theme set to ${t.label}`);
+                }}
                 className={`p-5 border-2 rounded-xl transition-all ${
-                  active ? "border-purple-500 bg-purple-50/50 shadow-md shadow-purple-100" : "border-gray-200 hover:border-purple-200"
+                  active ? "border-purple-500 bg-purple-50/50 dark:bg-purple-900/20 shadow-md shadow-purple-100 dark:shadow-none" : "border-gray-200 dark:border-gray-700 hover:border-purple-200 dark:hover:border-purple-700"
                 }`}
               >
                 <div className={`w-full h-16 rounded-lg mb-3 border ${t.preview}`} />
                 <div className="flex items-center justify-center gap-2">
-                  <Icon className={`w-4 h-4 ${active ? "text-purple-600" : "text-gray-500"}`} />
-                  <p className={`font-medium text-sm ${active ? "text-purple-700" : "text-gray-700"}`}>{t.label}</p>
+                  <Icon className={`w-4 h-4 ${active ? "text-purple-600 dark:text-purple-400" : "text-gray-500 dark:text-gray-400"}`} />
+                  <p className={`font-medium text-sm ${active ? "text-purple-700 dark:text-purple-400" : "text-gray-700 dark:text-gray-300"}`}>{t.label}</p>
                 </div>
               </button>
             );
@@ -1193,13 +1284,13 @@ function AppearanceTab() {
                 key={size}
                 onClick={() => setFontSize(size)}
                 className={`p-4 border-2 rounded-xl transition-all text-center ${
-                  fontSize === size ? "border-purple-500 bg-purple-50" : "border-gray-200 hover:border-purple-200"
+                  fontSize === size ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20" : "border-gray-200 dark:border-gray-700 hover:border-purple-200 dark:hover:border-purple-700"
                 }`}
               >
-                <span className={`font-medium ${size === "small" ? "text-xs" : size === "large" ? "text-lg" : "text-sm"} text-gray-900`}>
+                <span className={`font-medium ${size === "small" ? "text-xs" : size === "large" ? "text-lg" : "text-sm"} text-gray-900 dark:text-white`}>
                   Aa
                 </span>
-                <p className="text-xs text-gray-500 mt-1 capitalize">{size}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 capitalize">{size}</p>
               </button>
             ))}
           </div>
@@ -1214,30 +1305,30 @@ function AppearanceTab() {
                 key={d}
                 onClick={() => setDensity(d)}
                 className={`p-4 border-2 rounded-xl transition-all ${
-                  density === d ? "border-purple-500 bg-purple-50" : "border-gray-200 hover:border-purple-200"
+                  density === d ? "border-purple-500 bg-purple-50 dark:bg-purple-900/20" : "border-gray-200 dark:border-gray-700 hover:border-purple-200 dark:hover:border-purple-700"
                 }`}
               >
                 <div className="flex flex-col items-center gap-1 mb-2">
                   {[1, 2, 3].map((i) => (
                     <div
                       key={i}
-                      className={`bg-gray-300 rounded-full ${
+                      className={`bg-gray-300 dark:bg-gray-600 rounded-full ${
                         d === "compact" ? "h-1 w-8" : d === "spacious" ? "h-2 w-10" : "h-1.5 w-9"
                       }`}
                     />
                   ))}
                 </div>
-                <p className="text-xs text-gray-500 capitalize">{d}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{d}</p>
               </button>
             ))}
           </div>
         </div>
 
         {/* Sidebar */}
-        <div className="flex items-center justify-between py-4 border-t border-gray-100">
+        <div className="flex items-center justify-between py-4 border-t border-gray-100 dark:border-gray-700">
           <div>
-            <p className="font-medium text-gray-900 text-sm">Collapse sidebar by default</p>
-            <p className="text-xs text-gray-500 mt-0.5">Start with a minimized sidebar to maximize content area</p>
+            <p className="font-medium text-gray-900 dark:text-white text-sm">Collapse sidebar by default</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Start with a minimized sidebar to maximize content area</p>
           </div>
           <Toggle enabled={sidebarCollapsed} onChange={setSidebarCollapsed} />
         </div>
@@ -1313,7 +1404,7 @@ function SecurityTab() {
             <SectionTitle title="Two-Factor Authentication" subtitle="Add an extra layer of security to your account" />
           </div>
           <div className="flex items-center gap-3">
-            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium ${twoFAEnabled ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium ${twoFAEnabled ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" : "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"}`}>
               {twoFAEnabled ? <CheckCircle className="w-4 h-4" /> : <X className="w-4 h-4" />}
               {twoFAEnabled ? "Enabled" : "Disabled"}
             </div>
@@ -1329,12 +1420,12 @@ function SecurityTab() {
           </div>
         </div>
         {twoFAEnabled && (
-          <div className="mt-4 p-4 bg-green-50/60 border border-green-100 rounded-xl">
+          <div className="mt-4 p-4 bg-green-50/60 dark:bg-green-900/10 border border-green-100 dark:border-green-900/30 rounded-xl">
             <div className="flex items-center gap-3">
-              <Shield className="w-5 h-5 text-green-600" />
+              <Shield className="w-5 h-5 text-green-600 dark:text-green-500" />
               <div>
-                <p className="text-sm font-medium text-green-800">Two-factor authentication is active</p>
-                <p className="text-xs text-green-600 mt-0.5">Using authenticator app. Last verified 2 hours ago.</p>
+                <p className="text-sm font-medium text-green-800 dark:text-green-300">Two-factor authentication is active</p>
+                <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">Using authenticator app. Last verified 2 hours ago.</p>
               </div>
             </div>
           </div>
@@ -1347,7 +1438,7 @@ function SecurityTab() {
           <SectionTitle title="API Keys" subtitle="Manage keys for external integrations" />
           <button
             onClick={() => setShowNewKey(true)}
-            className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl font-medium transition-all shadow-md shadow-purple-200 flex items-center gap-2"
+            className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl font-medium transition-all shadow-md shadow-purple-200 dark:shadow-none flex items-center gap-2"
           >
             <Plus className="w-4 h-4" /> Generate Key
           </button>
@@ -1355,8 +1446,8 @@ function SecurityTab() {
 
         {/* New Key Form */}
         {showNewKey && (
-          <div className="p-5 bg-purple-50/60 rounded-xl border border-purple-100 mb-6 animate-in fade-in slide-in-from-top-2 duration-200">
-            <h3 className="font-semibold text-gray-900 mb-3">Generate New API Key</h3>
+          <div className="p-5 bg-purple-50/60 dark:bg-purple-900/20 rounded-xl border border-purple-100 dark:border-purple-800/50 mb-6 animate-in fade-in slide-in-from-top-2 duration-200">
+            <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Generate New API Key</h3>
             {!generatedKey ? (
               <div className="flex gap-3">
                 <input
@@ -1369,7 +1460,7 @@ function SecurityTab() {
                 <button onClick={generateApiKey} className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-medium transition-colors shrink-0 flex items-center gap-2">
                   <Zap className="w-4 h-4" /> Generate
                 </button>
-                <button onClick={() => { setShowNewKey(false); setNewKeyName(""); }} className="px-3 text-gray-500 hover:text-gray-700">
+                <button onClick={() => { setShowNewKey(false); setNewKeyName(""); }} className="px-3 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -1377,7 +1468,7 @@ function SecurityTab() {
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 text-amber-500" />
-                  <p className="text-sm text-amber-700 font-medium">Copy this key now. You won't be able to see it again.</p>
+                  <p className="text-sm text-amber-700 dark:text-amber-500 font-medium">Copy this key now. You won't be able to see it again.</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 px-4 py-3 bg-gray-900 text-green-400 rounded-xl font-mono text-sm truncate">
@@ -1388,7 +1479,7 @@ function SecurityTab() {
                   </button>
                 </div>
                 <div className="flex justify-end gap-3">
-                  <button onClick={() => { setShowNewKey(false); setNewKeyName(""); setGeneratedKey(""); }} className="px-4 py-2 text-gray-600 hover:bg-gray-50 rounded-xl font-medium">
+                  <button onClick={() => { setShowNewKey(false); setNewKeyName(""); setGeneratedKey(""); }} className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-xl font-medium">
                     Cancel
                   </button>
                   <button onClick={saveNewKey} className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-medium transition-colors">
@@ -1403,12 +1494,12 @@ function SecurityTab() {
         {/* Key List */}
         <div className="space-y-2">
           {apiKeys.map((apiKey) => (
-            <div key={apiKey.id} className="flex items-center justify-between p-4 bg-gray-50/80 rounded-xl hover:bg-gray-50 transition-colors group">
+            <div key={apiKey.id} className="flex items-center justify-between p-4 bg-gray-50/80 dark:bg-gray-800/50 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors group border border-transparent dark:border-gray-700">
               <div className="flex items-center gap-3">
                 <Key className="w-5 h-5 text-gray-400" />
                 <div>
-                  <p className="font-medium text-gray-900 text-sm">{apiKey.name}</p>
-                  <p className="text-xs text-gray-500 font-mono">{apiKey.key}</p>
+                  <p className="font-medium text-gray-900 dark:text-white text-sm">{apiKey.name}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 font-mono">{apiKey.key}</p>
                 </div>
               </div>
               <div className="flex items-center gap-4">
@@ -1430,19 +1521,19 @@ function SecurityTab() {
         <SectionTitle title="Active Sessions" subtitle="Manage devices logged into your account" />
         <div className="space-y-2">
           {sessions.map((session) => (
-            <div key={session.id} className="flex items-center justify-between p-4 hover:bg-gray-50 rounded-xl transition-colors group">
+            <div key={session.id} className="flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-xl transition-colors group">
               <div className="flex items-center gap-4">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${session.current ? "bg-green-100" : "bg-gray-100"}`}>
-                  <Monitor className={`w-5 h-5 ${session.current ? "text-green-600" : "text-gray-500"}`} />
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${session.current ? "bg-green-100 dark:bg-green-900/30" : "bg-gray-100 dark:bg-gray-800"}`}>
+                  <Monitor className={`w-5 h-5 ${session.current ? "text-green-600 dark:text-green-500" : "text-gray-500 dark:text-gray-400"}`} />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <p className="font-medium text-gray-900 text-sm">{session.device}</p>
+                    <p className="font-medium text-gray-900 dark:text-white text-sm">{session.device}</p>
                     {session.current && (
-                      <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">This device</span>
+                      <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full text-xs font-medium">This device</span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-500 flex items-center gap-1.5 mt-0.5">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5 mt-0.5">
                     <MapPin className="w-3 h-3" /> {session.location} • <Clock className="w-3 h-3" /> {session.time}
                   </p>
                 </div>
@@ -1458,13 +1549,13 @@ function SecurityTab() {
             </div>
           ))}
         </div>
-        <div className="mt-4 pt-4 border-t border-gray-100">
+        <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
           <button
             onClick={() => {
               setSessions((prev) => prev.filter((s) => s.current));
               toast.success("All other sessions revoked");
             }}
-            className="text-red-600 hover:text-red-700 font-medium text-sm"
+            className="text-red-600 dark:text-red-500 hover:text-red-700 dark:hover:text-red-400 font-medium text-sm"
           >
             Revoke all other sessions
           </button>
