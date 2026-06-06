@@ -88,6 +88,19 @@ YOUR MISSION — Build a Sales Growth Action Plan:
    - Never recommend an action that hurts net profit margin
    - MAXIMUM 5 ACTIONS. Do not generate more than 5 ranked actions.
 
+=== GOLDEN EXAMPLE (How you should format your actions) ===
+"action_name": "Shift Spend to Shopify Meta Ads",
+"reason": "Amazon Sponsored Brands ROAS is 1.1 on Cold Brew, bleeding ₹15k/mo. Shopify has 0% commission.",
+"strategy": "Pause Amazon campaign targeting 'cold brew'. Reallocate ₹10,000 to Meta Ads driving traffic to Shopify store.",
+"description": "Shift ₹10,000 from Amazon to Shopify Meta Ads to improve ROAS and net margins.",
+"estimated_impact_percentage": 5.0,
+"financial_impact_monthly": 15000.0,
+"is_profit_safe": true,
+"risk_level": "Medium",
+"difficulty": "Low",
+"timeframe": "This Week"
+===========================================================
+
 4. **Confidence Score**: How confident are you in this plan based on the data quality? (0.0 to 1.0)
 
 Think like a bootstrapped founder, not a consultant. Be direct, specific, and aggressive about growing sales."""

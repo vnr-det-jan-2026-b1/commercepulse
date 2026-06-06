@@ -100,7 +100,23 @@ IMPORTANT: Every action in recommended_actions MUST include ALL required fields:
         try:
             key = get_groq_api_key()
             llm = ChatGroq(api_key=key, model="llama-3.3-70b-versatile", temperature=0.0)
-            result: RevenueInsights = llm.with_structured_output(RevenueInsights).invoke(prompt)
+            from app.agents.tools.analytics_tools import fetch_live_product_inventory
+            llm_with_tools = llm.bind_tools([fetch_live_product_inventory])
+            
+            messages = [{"role": "user", "content": prompt}]
+            ai_msg = llm_with_tools.invoke(messages)
+            
+            # Execute tool if requested
+            if getattr(ai_msg, "tool_calls", None):
+                for tool_call in ai_msg.tool_calls:
+                    if tool_call["name"] == "fetch_live_product_inventory":
+                        product_id = tool_call["args"].get("product_id", "")
+                        tool_res = fetch_live_product_inventory.invoke({"product_id": product_id})
+                        messages.append(ai_msg)
+                        messages.append({"role": "tool", "tool_call_id": tool_call["id"], "name": tool_call["name"], "content": str(tool_res)})
+            
+            # Now extract the final structured output
+            result: RevenueInsights = llm.with_structured_output(RevenueInsights).invoke(messages)
             return {"revenue_insights": result}
         except Exception as e:
             error_str = str(e)

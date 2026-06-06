@@ -6,6 +6,7 @@ from app.agents.nodes.operations import run_ops_agent
 from app.agents.nodes.customer import run_customer_agent
 from app.agents.nodes.synthesizer import run_synthesizer
 from app.agents.nodes.marketing import run_marketing_agent
+from app.agents.nodes.critic import run_critic
 
 def build_commerce_pulse_engine():
     """
@@ -20,6 +21,7 @@ def build_commerce_pulse_engine():
     workflow.add_node("customer_agent", run_customer_agent)
     workflow.add_node("marketing_agent", run_marketing_agent)
     workflow.add_node("synthesizer", run_synthesizer)
+    workflow.add_node("critic", run_critic)
     
     # 2. Define the exact flow
     workflow.set_entry_point("orchestrator")
@@ -32,9 +34,10 @@ def build_commerce_pulse_engine():
     workflow.add_edge("operations_agent", "customer_agent")
     workflow.add_edge("customer_agent", "marketing_agent")
     workflow.add_edge("marketing_agent", "synthesizer")
+    workflow.add_edge("synthesizer", "critic")
     
     # End execution
-    workflow.add_edge("synthesizer", END)
+    workflow.add_edge("critic", END)
     
     # Compile the decision engine
     commerce_pulse_engine = workflow.compile()
