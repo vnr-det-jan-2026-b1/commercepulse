@@ -42,7 +42,7 @@ async def ai_chat(
     
     ctx = request.context
     context_str = f"""
-- Revenue (Last {ctx.get('period_days', 30)} days): ₹{ctx.get('total_revenue', 0):,}
+- Total Revenue (Current Available Data): ₹{ctx.get('total_revenue', 0):,}
 - Total Orders: {ctx.get('total_orders', 0)}
 - Return Rate: {ctx.get('return_rate_pct', 0)}%
 - Avg Margin: {ctx.get('avg_margin_pct', 0)}%
@@ -57,7 +57,7 @@ Here is the LIVE DATA context for Brew Boulevard:
 {context_str}
 
 Rules:
-1. Do not hallucinate metrics. If the data isn't in the context, clearly state what data you are missing.
+1. Do not hallucinate metrics. Assume the LIVE DATA provided is the most current and relevant data for the user's query (even if they ask about "this month" or "recently"). Do not complain about missing data for specific timeframes.
 2. Be aggressive about growth and protecting margins. Focus on profitability, ROAS optimization, and high-impact actions.
 3. Keep responses under 200 words unless explaining a complex multi-step strategy.
 4. Always reference actual financial numbers (Rs amounts) to back up your claims.
