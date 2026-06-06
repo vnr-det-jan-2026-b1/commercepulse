@@ -99,7 +99,7 @@ async def log_requests(request: Request, call_next):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS if hasattr(settings, "CORS_ORIGINS") else ["http://localhost:3000", "http://localhost:4000", "http://127.0.0.1:4000", "http://127.0.0.1:3000"],
+    allow_origins=settings.CORS_ORIGINS if hasattr(settings, "CORS_ORIGINS") and settings.APP_ENV != "production" else ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )

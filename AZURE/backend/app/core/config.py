@@ -7,7 +7,10 @@ from pydantic import Field
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # PostgreSQL
+    # PostgreSQL Connection String / URI (takes precedence if provided)
+    DATABASE_URL:      str = ""
+
+    # Individual PostgreSQL Settings (fallback)
     POSTGRES_HOST:     str = "localhost"
     POSTGRES_PORT:     int = 5432
     POSTGRES_DB:       str = "commercepulse"
@@ -39,17 +42,47 @@ class Settings(BaseSettings):
 
     @property
     def async_db_url(self) -> str:
+        if self.DATABASE_URL:
+            url = self.DATABASE_URL
+            if url.startswith("postgresql://"):
+                url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            elif url.startswith("postgres://"):
+                url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+            
+            # Ensure SSL is appended for remote databases like Supabase
+            if "supabase.co" in url or "supabase.com" in url:
+                if "?" in url:
+                    if "ssl" not in url:
+                        url += "&ssl=require"
+                else:
+                    url += "?ssl=require"
+            return url
+
         base = (
             f"postgresql+asyncpg://{self.POSTGRES_USER}:{self._pw}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
-        # Supabase requires SSL; local docker does not
         if "supabase.co" in self.POSTGRES_HOST:
             base += "?ssl=require"
         return base
 
     @property
     def sync_db_url(self) -> str:
+        if self.DATABASE_URL:
+            url = self.DATABASE_URL
+            if url.startswith("postgresql://"):
+                url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+            elif url.startswith("postgres://"):
+                url = url.replace("postgres://", "postgresql+psycopg2://", 1)
+                
+            if "supabase.co" in url or "supabase.com" in url:
+                if "?" in url:
+                    if "sslmode" not in url:
+                        url += "&sslmode=require"
+                else:
+                    url += "?sslmode=require"
+            return url
+
         base = (
             f"postgresql+psycopg2://{self.POSTGRES_USER}:{self._pw}"
             f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"

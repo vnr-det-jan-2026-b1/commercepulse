@@ -1,7 +1,7 @@
 // src/app/services/api.ts
 
-const API_BASE_URL = '/api';
-const AI_API_BASE_URL = '/ai-api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const AI_API_BASE_URL = import.meta.env.VITE_AI_API_URL || '/ai-api';
 const API_KEY = import.meta.env.VITE_API_KEY || 'dev-api-key';
 
 // Seller info — will be set dynamically after creating/fetching the seller
