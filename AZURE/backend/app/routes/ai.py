@@ -78,7 +78,7 @@ Rules:
             response = await client.post(
                 "https://api.groq.com/openai/v1/chat/completions",
                 headers={
-                    "Authorization": f"Bearer {groq_api_key}",
+                    "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json"
                 },
                 json={
@@ -92,6 +92,33 @@ Rules:
             response.raise_for_status()
             data = response.json()
             return {"reply": data["choices"][0]["message"]["content"]}
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 429:
+                logger.warning("70b rate limit hit, falling back to 8b-instant")
+                try:
+                    fallback_response = await client.post(
+                        "https://api.groq.com/openai/v1/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {api_key}",
+                            "Content-Type": "application/json"
+                        },
+                        json={
+                            "model": "llama-3.1-8b-instant",
+                            "messages": messages,
+                            "temperature": 0.2,
+                            "max_tokens": 800,
+                        },
+                        timeout=45.0
+                    )
+                    fallback_response.raise_for_status()
+                    data = fallback_response.json()
+                    return {"reply": data["choices"][0]["message"]["content"]}
+                except Exception as fallback_err:
+                    logger.error(f"Groq API Error on fallback: {str(fallback_err)}")
+                    raise HTTPException(status_code=500, detail=str(fallback_err))
+            else:
+                logger.error(f"Groq API Error: {str(e)}")
+                raise HTTPException(status_code=500, detail=str(e))
         except Exception as e:
             logger.error(f"Groq API Error: {str(e)}")
             raise HTTPException(status_code=500, detail=str(e))
@@ -500,7 +527,7 @@ async def get_product_analysis(
     Returns the latest cached AI analysis for a product.
     """
     sql = text("""
-        SELECT seller_id, product_id, analysis_date, product_metrics, executive_summary, status, created_at, updated_at
+        SELECT id, seller_id, product_id, analysis_date, product_metrics, executive_summary, status, created_at, updated_at
         FROM ai_product_analyses
         WHERE product_id = :product_id AND seller_id = :seller_id
         ORDER BY analysis_date DESC
@@ -513,14 +540,12 @@ async def get_product_analysis(
         return {"status": "not_found", "message": "No analysis found for this product."}
         
     d = dict(row)
-    d['id'] = str(d['id'])
-    d['product_id'] = str(d['product_id'])
-    d['seller_id'] = str(d['seller_id'])
-    if d['analysis_date']:
-        d['analysis_date'] = str(d['analysis_date'])
-    if d['created_at']:
-        d['created_at'] = str(d['created_at'])
-    if d['updated_at']:
-        d['updated_at'] = str(d['updated_at'])
+    # Safely serialize UUID and date fields
+    for field in ['id', 'product_id', 'seller_id']:
+        if field in d and d[field] is not None:
+            d[field] = str(d[field])
+    for field in ['analysis_date', 'created_at', 'updated_at']:
+        if field in d and d[field] is not None:
+            d[field] = str(d[field])
         
     return {"status": "success", "data": d}

@@ -179,9 +179,10 @@ export function AIIntelligencePage() {
               }
 
               return (
-                <div 
+                <Link 
                   key={product.product_id}
-                  className="relative group h-full"
+                  to={`/ai/products/${product.product_id}`}
+                  className="relative group h-full block cursor-pointer text-left"
                   style={{ animation: `fadeUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) ${i * 0.05}s both` }}
                 >
                   {/* Decorative glow background */}
@@ -256,15 +257,18 @@ export function AIIntelligencePage() {
                       </div>
 
                       {hasAnalysis ? (
-                        <Link 
-                          to={`/ai/products/${product.product_id}`}
-                          className="p-2 bg-purple-500/10 border border-purple-500/20 rounded-lg text-purple-400 hover:bg-purple-500/20 hover:text-white hover:border-purple-500/40 transition-all group/btn"
+                        <div 
+                          className="p-2 bg-purple-500/10 border border-purple-500/20 rounded-lg text-purple-400 group-hover:bg-purple-500/20 group-hover:text-white transition-all"
                         >
-                          <ArrowRight className="w-5 h-5 group-hover/btn:translate-x-0.5 transition-transform" />
-                        </Link>
+                          <ArrowRight className="w-5 h-5" />
+                        </div>
                       ) : (
                         <button
-                          onClick={(e) => handleAnalyze(product.product_id, e)}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleAnalyze(product.product_id, e);
+                          }}
                           disabled={isAnalyzing}
                           className="flex items-center gap-2 px-3 py-2 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 rounded-lg text-xs font-bold text-purple-400 transition-all disabled:opacity-50"
                         >
@@ -278,7 +282,7 @@ export function AIIntelligencePage() {
                       )}
                     </div>
                   </div>
-                </div>
+                </Link>
               );
             })}
           </div>

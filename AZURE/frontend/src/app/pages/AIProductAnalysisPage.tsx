@@ -3,14 +3,16 @@ import { useParams, Link } from "react-router";
 import { 
   ArrowLeft, Brain, TrendingUp, ShieldAlert, CheckCircle2, AlertTriangle, 
   Target, Globe, Lightbulb, Activity, ShoppingCart, Truck, RotateCcw,
-  IndianRupee, MousePointerClick, Package, BarChart3, Store, Sparkles
+  IndianRupee, MousePointerClick, Package, BarChart3, Store, Sparkles, Loader2
 } from "lucide-react";
-import { getProductAnalysis, ensureSeller, triggerProductAnalysis } from "../services/api";
+import { getProductAnalysis, ensureSeller, triggerProductAnalysis, fetchProductsWithAnalysis } from "../services/api";
 
 export function AIProductAnalysisPage() {
   const { id: productId } = useParams<{ id: string }>();
   const [data, setData] = useState<any>(null);
+  const [productDetails, setProductDetails] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [activeTab, setActiveTab] = useState('summary');
 
   useEffect(() => {
@@ -25,11 +27,33 @@ export function AIProductAnalysisPage() {
       const res = await getProductAnalysis(sellerId, productId);
       if (res.status === 'success') {
         setData(res.data);
+      } else {
+        // Fallback: fetch basic product info and metrics
+        const listRes = await fetchProductsWithAnalysis(sellerId);
+        const prod = listRes.data?.find((p: any) => p.product_id === productId);
+        if (prod) {
+          setProductDetails(prod);
+        }
       }
     } catch (error) {
       console.error("Failed to load product analysis:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleStartAnalysis = async () => {
+    if (!productId) return;
+    try {
+      setIsAnalyzing(true);
+      const sellerId = await ensureSeller();
+      await triggerProductAnalysis(sellerId, productId);
+      await loadData();
+    } catch (error: any) {
+      console.error("Failed to trigger analysis:", error);
+      alert(error.response?.data?.detail || "The AI Agent service is currently unreachable or failed to process this request. Please ensure the AI server is running on port 8001.");
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
@@ -41,7 +65,7 @@ export function AIProductAnalysisPage() {
     );
   }
 
-  if (!data || !data.executive_summary) {
+  if (!data && !productDetails) {
     return (
       <div className="min-h-screen bg-[#0a0a1a] text-white -m-8 p-8">
         <Link to="/ai/intelligence" className="inline-flex items-center gap-2 text-purple-400 hover:text-purple-300 mb-8 transition-colors">
@@ -49,8 +73,8 @@ export function AIProductAnalysisPage() {
         </Link>
         <div className="bg-white/5 border border-white/10 rounded-2xl p-8 text-center max-w-2xl mx-auto">
           <Brain className="w-16 h-16 text-purple-500/50 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold mb-2">No AI Analysis Found</h2>
-          <p className="text-purple-200/60 mb-6">This product hasn't been analyzed yet, or the analysis is still running.</p>
+          <h2 className="text-2xl font-bold mb-2">Product Not Found</h2>
+          <p className="text-purple-200/60 mb-6">We couldn't retrieve metadata for this product.</p>
           <Link to="/ai/intelligence" className="px-6 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg font-medium transition-colors">
             Return to Grid
           </Link>
@@ -59,16 +83,28 @@ export function AIProductAnalysisPage() {
     );
   }
 
-  const metrics = data.product_metrics || {};
-  const ai = data.executive_summary || {};
+  const hasAnalysis = !!(data && data.executive_summary);
+  const metrics = data?.product_metrics || {
+    product_name: productDetails?.product_name || "Whole Bean Coffee",
+    sku: productDetails?.sku || "",
+    category: productDetails?.category || "Coffee",
+    total_revenue: productDetails?.total_revenue || 0,
+    total_orders: productDetails?.total_orders || 0,
+    margin_pct: productDetails?.margin_pct || 0,
+    stock_level: productDetails?.stock_level || 0,
+    roas: productDetails?.roas || 0,
+  };
+  const ai = data?.executive_summary || {};
   const recommendations = ai.recommendations || [];
 
   // Determine colors based on health score
-  const score = ai.product_health_score || 0;
+  const score = hasAnalysis ? (ai.product_health_score || 0) : null;
   let themeColor = "purple";
-  if (score >= 80) themeColor = "emerald";
-  else if (score >= 50) themeColor = "amber";
-  else themeColor = "rose";
+  if (score !== null) {
+    if (score >= 80) themeColor = "emerald";
+    else if (score >= 50) themeColor = "amber";
+    else themeColor = "rose";
+  }
 
   const themeMap: Record<string, any> = {
     emerald: { 
@@ -129,32 +165,47 @@ export function AIProductAnalysisPage() {
                   return metrics.product_name;
                 })()}
               </h1>
-              <p className="text-xl text-white/70 max-w-2xl">{ai.primary_observation}</p>
+              <p className="text-xl text-white/70 max-w-2xl">{ai.primary_observation || "No active AI diagnostics. Start the intelligence cycle to run multi-agent inference."}</p>
             </div>
             
             <div className="flex gap-6 items-center">
               <div className="flex flex-col gap-2 items-end mr-4">
-                <button
-                  onClick={async () => {
-                    try {
-                      setLoading(true);
-                      const sellerId = await ensureSeller();
-                      await triggerProductAnalysis(sellerId, productId!);
-                      await loadData();
-                    } catch (err) {
-                      console.error(err);
-                      setLoading(false);
-                    }
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm font-bold text-white transition-all"
-                >
-                  <Sparkles className="w-4 h-4" /> RE-ANALYZE
-                </button>
+                {hasAnalysis ? (
+                  <button
+                    onClick={async () => {
+                      try {
+                        setLoading(true);
+                        const sellerId = await ensureSeller();
+                        await triggerProductAnalysis(sellerId, productId!);
+                        await loadData();
+                      } catch (err) {
+                        console.error(err);
+                        setLoading(false);
+                      }
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm font-bold text-white transition-all"
+                  >
+                    <Sparkles className="w-4 h-4" /> RE-ANALYZE
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleStartAnalysis}
+                    disabled={isAnalyzing}
+                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 border border-purple-500/30 rounded-lg text-sm font-bold text-white transition-all disabled:opacity-50 shadow-[0_0_15px_rgba(168,85,247,0.4)]"
+                  >
+                    {isAnalyzing ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-4 h-4" />
+                    )}
+                    {isAnalyzing ? "ANALYZING" : "START ANALYSIS"}
+                  </button>
+                )}
               </div>
               <div className="text-right">
                 <p className="text-sm font-medium text-white/50 uppercase tracking-widest mb-1">Health Score</p>
                 <div className={`text-6xl font-black ${theme.text} ${theme.glow}`}>
-                  {score}
+                  {score !== null ? score : "--"}
                 </div>
               </div>
             </div>
@@ -244,182 +295,225 @@ export function AIProductAnalysisPage() {
           </div>
         )}
 
-        {/* SWOT Diagnostics Grid */}
-        <div className="bg-white/5 border border-white/10 rounded-3xl p-8 backdrop-blur-xl shadow-xl">
-          <div className="mb-6 flex items-center gap-3">
-             <Brain className="w-6 h-6 text-purple-400" />
-             <h3 className="text-xl font-bold text-white">SWOT & Diagnostic Matrix</h3>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Strengths */}
-            <div className="bg-gradient-to-br from-emerald-500/10 to-transparent border border-emerald-500/20 rounded-2xl p-6">
-              <h4 className="text-sm font-semibold uppercase tracking-wider text-emerald-400 mb-4 flex items-center gap-2">
-                <TrendingUp className="w-4 h-4" /> Strengths
-              </h4>
-              <div className="space-y-4">
-                {ai.strengths?.map((s: any, i: number) => (
-                  <div key={i} className="bg-emerald-900/20 border border-emerald-500/10 rounded-xl p-4">
-                    <div className="flex items-start gap-3 mb-2">
-                      <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
-                      <div className="flex-1">
-                        <h5 className="font-bold text-emerald-100">{s.title || s}</h5>
-                      </div>
-                      {s.impact && (
-                        <span className="text-[10px] uppercase font-bold px-2 py-1 bg-emerald-500/20 text-emerald-400 rounded-full">
-                          Impact: {s.impact}
-                        </span>
-                      )}
-                    </div>
-                    {s.detail && <p className="text-sm text-emerald-100/70 mb-3 ml-8">{s.detail}</p>}
-                    {s.metric_value && (
-                      <div className="ml-8 inline-block px-3 py-1 bg-emerald-950/50 border border-emerald-500/20 rounded-lg text-xs font-mono text-emerald-300">
-                        Metric: {s.metric_value}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
+        {!hasAnalysis ? (
+          <div className="bg-gradient-to-b from-[#13132e] to-[#0a0a1a] border border-purple-500/20 rounded-3xl p-10 backdrop-blur-xl shadow-2xl relative overflow-hidden text-center max-w-3xl mx-auto my-12">
+            {/* Ambient light overlay */}
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[300px] h-[300px] bg-purple-500/10 rounded-full blur-[80px] pointer-events-none" />
             
-            {/* Weaknesses */}
-            <div className="bg-gradient-to-br from-rose-500/10 to-transparent border border-rose-500/20 rounded-2xl p-6">
-              <h4 className="text-sm font-semibold uppercase tracking-wider text-rose-400 mb-4 flex items-center gap-2">
-                <ShieldAlert className="w-4 h-4" /> Weaknesses
-              </h4>
-              <div className="space-y-4">
-                {ai.weaknesses?.map((w: any, i: number) => (
-                  <div key={i} className="bg-rose-900/20 border border-rose-500/10 rounded-xl p-4">
-                    <div className="flex items-start gap-3 mb-2">
-                      <AlertTriangle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
-                      <div className="flex-1">
-                        <h5 className="font-bold text-rose-100">{w.title || w}</h5>
-                      </div>
-                      {w.impact && (
-                        <span className="text-[10px] uppercase font-bold px-2 py-1 bg-rose-500/20 text-rose-400 rounded-full">
-                          Impact: {w.impact}
-                        </span>
-                      )}
-                    </div>
-                    {w.detail && <p className="text-sm text-rose-100/70 mb-3 ml-8">{w.detail}</p>}
-                    {w.metric_value && (
-                      <div className="ml-8 inline-block px-3 py-1 bg-rose-950/50 border border-rose-500/20 rounded-lg text-xs font-mono text-rose-300">
-                        Metric: {w.metric_value}
-                      </div>
-                    )}
-                  </div>
-                ))}
+            <div className="relative z-10 space-y-6">
+              <div className="p-4 bg-purple-500/10 border border-purple-500/20 rounded-2xl w-16 h-16 mx-auto flex items-center justify-center relative group">
+                <div className="absolute inset-0 bg-purple-500/20 blur-md rounded-2xl group-hover:bg-purple-500/40 transition-all" />
+                <Brain className="w-8 h-8 text-purple-400 relative z-10 animate-pulse" />
+              </div>
+              
+              <div className="space-y-2">
+                <h3 className="text-2xl font-bold text-white tracking-tight">Generate AI Intelligence Report</h3>
+                <p className="text-purple-200/60 max-w-md mx-auto leading-relaxed text-sm">
+                  Run CommercePulse's multi-agent decision engine to analyze pricing strategies, inventory snapshots, return logistics, and ad spend. This generates a SWOT matrix, unit economics, and prioritized growth recommendations.
+                </p>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  onClick={handleStartAnalysis}
+                  disabled={isAnalyzing}
+                  className="inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white font-bold rounded-xl shadow-[0_0_30px_rgba(168,85,247,0.3)] transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none text-sm uppercase tracking-wider"
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Inference Running...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-5 h-5" />
+                      Run AI Analysis
+                    </>
+                  )}
+                </button>
               </div>
             </div>
-
-            {/* Root Causes / Threats */}
-            <div className="bg-gradient-to-br from-amber-500/10 to-transparent border border-amber-500/20 rounded-2xl p-6">
-              <h4 className="text-sm font-semibold uppercase tracking-wider text-amber-400 mb-4 flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4" /> Core Threats & Root Causes
-              </h4>
-              <div className="space-y-4">
-                {ai.root_causes?.map((rc: any, i: number) => (
-                  <div key={i} className="bg-amber-900/20 border border-amber-500/10 rounded-xl p-4">
-                    {rc.linked_weakness && (
-                      <div className="text-[10px] uppercase font-bold text-amber-500/70 mb-2 flex items-center gap-1">
-                        <ArrowLeft className="w-3 h-3" /> Linked to: {rc.linked_weakness}
-                      </div>
-                    )}
-                    <p className="text-sm text-amber-100 font-medium mb-3">{rc.cause || rc}</p>
-                    {rc.evidence && (
-                      <div className="px-3 py-2 bg-amber-950/50 border border-amber-500/20 rounded-lg text-xs text-amber-300">
-                        <strong>Evidence:</strong> {rc.evidence}
-                      </div>
-                    )}
-                  </div>
-                ))}
+          </div>
+        ) : (
+          <>
+            {/* SWOT Diagnostics Grid */}
+            <div className="bg-white/5 border border-white/10 rounded-3xl p-8 backdrop-blur-xl shadow-xl">
+              <div className="mb-6 flex items-center gap-3">
+                 <Brain className="w-6 h-6 text-purple-400" />
+                 <h3 className="text-xl font-bold text-white">SWOT & Diagnostic Matrix</h3>
               </div>
-            </div>
-
-            {/* Cross Market / Opportunities */}
-            <div className="bg-gradient-to-br from-cyan-500/10 to-transparent border border-cyan-500/20 rounded-2xl p-6">
-              <h4 className="text-sm font-semibold uppercase tracking-wider text-cyan-400 mb-4 flex items-center gap-2">
-                <Globe className="w-4 h-4" /> Market Context & Opportunities
-              </h4>
-              <p className="text-cyan-100/80 leading-relaxed text-sm">
-                {ai.cross_marketplace_summary}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Action Plan */}
-        <div className="bg-gradient-to-b from-purple-500/10 to-transparent border border-purple-500/20 rounded-3xl p-8 backdrop-blur-xl shadow-2xl">
-          <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
-            <h3 className="text-2xl font-bold text-white flex items-center gap-3">
-              <Lightbulb className="w-7 h-7 text-purple-400" /> 
-              Tactical Recommendations
-            </h3>
-            <span className="text-sm font-mono text-purple-400 bg-purple-500/20 px-4 py-1.5 rounded-full font-semibold border border-purple-500/30">
-              Ranked by ROI Potential
-            </span>
-          </div>
-          
-          <div className="grid grid-cols-1 gap-6">
-            {recommendations.map((rec: any, idx: number) => (
-              <div key={idx} className="bg-[#0a0a1a]/60 border border-white/10 hover:border-purple-500/50 transition-all duration-300 rounded-2xl p-6 relative overflow-hidden group shadow-lg hover:shadow-purple-500/10">
-                {/* Rank indicator */}
-                <div className="absolute top-0 right-0 bg-gradient-to-bl from-purple-500/30 to-purple-900/40 border-b border-l border-purple-500/30 px-5 py-2 rounded-bl-2xl text-xs font-mono text-purple-300 font-bold shadow-lg">
-                  Priority #{idx + 1}
-                </div>
-
-                <div className="pr-24">
-                  <h4 className="text-xl font-bold text-white mb-2 group-hover:text-purple-300 transition-colors">{rec.action_name}</h4>
-                  <p className="text-sm text-purple-100/60 mb-5 leading-relaxed max-w-4xl">{rec.description}</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Strengths */}
+                <div className="bg-gradient-to-br from-emerald-500/10 to-transparent border border-emerald-500/20 rounded-2xl p-6">
+                  <h4 className="text-sm font-semibold uppercase tracking-wider text-emerald-400 mb-4 flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4" /> Strengths
+                  </h4>
+                  <div className="space-y-4">
+                    {ai.strengths?.map((s: any, i: number) => (
+                      <div key={i} className="bg-emerald-900/20 border border-emerald-500/10 rounded-xl p-4">
+                        <div className="flex items-start gap-3 mb-2">
+                          <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
+                          <div className="flex-1">
+                            <h5 className="font-bold text-emerald-100">{s.title || s}</h5>
+                          </div>
+                          {s.impact && (
+                            <span className="text-[10px] uppercase font-bold px-2 py-1 bg-emerald-500/20 text-emerald-400 rounded-full">
+                              Impact: {s.impact}
+                            </span>
+                          )}
+                        </div>
+                        {s.detail && <p className="text-sm text-emerald-100/70 mb-3 ml-8">{s.detail}</p>}
+                        {s.metric_value && (
+                          <div className="ml-8 inline-block px-3 py-1 bg-emerald-950/50 border border-emerald-500/20 rounded-lg text-xs font-mono text-emerald-300">
+                            Metric: {s.metric_value}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 
-                <div className="flex flex-wrap gap-3 mb-6">
-                  <span className={`text-xs px-3 py-1.5 rounded-md font-semibold border shadow-sm ${rec.risk_level === 'High' ? 'bg-rose-500/10 border-rose-500/30 text-rose-400' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'}`}>
-                    Risk: {rec.risk_level}
-                  </span>
-                  <span className="text-xs px-3 py-1.5 rounded-md font-semibold border shadow-sm bg-amber-500/10 border-amber-500/30 text-amber-400">
-                    Effort: {rec.difficulty}
-                  </span>
-                  <span className="text-xs px-3 py-1.5 rounded-md font-semibold border shadow-sm bg-cyan-500/10 border-cyan-500/30 text-cyan-400">
-                    {rec.timeframe}
-                  </span>
-                  {rec.is_profit_safe && (
-                    <span className="text-xs px-3 py-1.5 rounded-md font-semibold border shadow-sm bg-purple-500/10 border-purple-500/30 text-purple-400 flex items-center gap-1.5">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Profit Safe
-                    </span>
-                  )}
+                {/* Weaknesses */}
+                <div className="bg-gradient-to-br from-rose-500/10 to-transparent border border-rose-500/20 rounded-2xl p-6">
+                  <h4 className="text-sm font-semibold uppercase tracking-wider text-rose-400 mb-4 flex items-center gap-2">
+                    <ShieldAlert className="w-4 h-4" /> Weaknesses
+                  </h4>
+                  <div className="space-y-4">
+                    {ai.weaknesses?.map((w: any, i: number) => (
+                      <div key={i} className="bg-rose-900/20 border border-rose-500/10 rounded-xl p-4">
+                        <div className="flex items-start gap-3 mb-2">
+                          <AlertTriangle className="w-5 h-5 text-rose-500 shrink-0 mt-0.5" />
+                          <div className="flex-1">
+                            <h5 className="font-bold text-rose-100">{w.title || w}</h5>
+                          </div>
+                          {w.impact && (
+                            <span className="text-[10px] uppercase font-bold px-2 py-1 bg-rose-500/20 text-rose-400 rounded-full">
+                              Impact: {w.impact}
+                            </span>
+                          )}
+                        </div>
+                        {w.detail && <p className="text-sm text-rose-100/70 mb-3 ml-8">{w.detail}</p>}
+                        {w.metric_value && (
+                          <div className="ml-8 inline-block px-3 py-1 bg-rose-950/50 border border-rose-500/20 rounded-lg text-xs font-mono text-rose-300">
+                            Metric: {w.metric_value}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                  <div className="bg-white/5 rounded-xl p-5 border border-white/5 group-hover:border-white/10 transition-colors shadow-inner">
-                    <p className="text-[11px] text-white/40 font-bold uppercase tracking-widest mb-2 flex items-center gap-2"><Target className="w-3.5 h-3.5"/> Strategic Reason</p>
-                    <p className="text-sm text-white/80 leading-relaxed">{rec.reason}</p>
-                  </div>
-                  <div className="bg-white/5 rounded-xl p-5 border border-white/5 group-hover:border-white/10 transition-colors shadow-inner">
-                    <p className="text-[11px] text-white/40 font-bold uppercase tracking-widest mb-2 flex items-center gap-2"><Activity className="w-3.5 h-3.5"/> Execution Strategy</p>
-                    <p className="text-sm text-white/80 leading-relaxed">{rec.strategy}</p>
+                {/* Root Causes / Threats */}
+                <div className="bg-gradient-to-br from-amber-500/10 to-transparent border border-amber-500/20 rounded-2xl p-6">
+                  <h4 className="text-sm font-semibold uppercase tracking-wider text-amber-400 mb-4 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4" /> Core Threats & Root Causes
+                  </h4>
+                  <div className="space-y-4">
+                    {ai.root_causes?.map((rc: any, i: number) => (
+                      <div key={i} className="bg-amber-900/20 border border-amber-500/10 rounded-xl p-4">
+                        {rc.linked_weakness && (
+                          <div className="text-[10px] uppercase font-bold text-amber-500/70 mb-2 flex items-center gap-1">
+                            <ArrowLeft className="w-3 h-3" /> Linked to: {rc.linked_weakness}
+                          </div>
+                        )}
+                        <p className="text-sm text-amber-100 font-medium mb-3">{rc.cause || rc}</p>
+                        {rc.evidence && (
+                          <div className="px-3 py-2 bg-amber-950/50 border border-amber-500/20 rounded-lg text-xs text-amber-300">
+                            <strong>Evidence:</strong> {rc.evidence}
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-8 pt-5 border-t border-white/10 mt-2">
-                  <div>
-                    <p className="text-[11px] text-emerald-400/60 font-bold uppercase tracking-widest mb-1">Estimated Growth</p>
-                    <p className="text-2xl font-mono text-emerald-400 font-bold flex items-center gap-2">
-                      <TrendingUp className="w-5 h-5" />
-                      +{rec.estimated_impact_percentage}%
-                    </p>
-                  </div>
-                  <div className="hidden md:block w-px h-10 bg-white/10"></div>
-                  <div>
-                    <p className="text-[11px] text-emerald-400/60 font-bold uppercase tracking-widest mb-1">Monthly Financial ROI</p>
-                    <p className={`text-2xl font-mono font-bold flex items-center gap-2 ${rec.financial_impact_monthly >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {rec.financial_impact_monthly >= 0 ? '+' : ''}₹{rec.financial_impact_monthly?.toLocaleString()}
-                    </p>
-                  </div>
+                {/* Cross Market / Opportunities */}
+                <div className="bg-gradient-to-br from-cyan-500/10 to-transparent border border-cyan-500/20 rounded-2xl p-6">
+                  <h4 className="text-sm font-semibold uppercase tracking-wider text-cyan-400 mb-4 flex items-center gap-2">
+                    <Globe className="w-4 h-4" /> Market Context & Opportunities
+                  </h4>
+                  <p className="text-cyan-100/80 leading-relaxed text-sm">
+                    {ai.cross_marketplace_summary}
+                  </p>
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
+            </div>
+
+            {/* Action Plan */}
+            <div className="bg-gradient-to-b from-purple-500/10 to-transparent border border-purple-500/20 rounded-3xl p-8 backdrop-blur-xl shadow-2xl">
+              <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+                <h3 className="text-2xl font-bold text-white flex items-center gap-3">
+                  <Lightbulb className="w-7 h-7 text-purple-400" /> 
+                  Tactical Recommendations
+                </h3>
+                <span className="text-sm font-mono text-purple-400 bg-purple-500/20 px-4 py-1.5 rounded-full font-semibold border border-purple-500/30">
+                  Ranked by ROI Potential
+                </span>
+              </div>
+              
+              <div className="grid grid-cols-1 gap-6">
+                {recommendations.map((rec: any, idx: number) => (
+                  <div key={idx} className="bg-[#0a0a1a]/60 border border-white/10 hover:border-purple-500/50 transition-all duration-300 rounded-2xl p-6 relative overflow-hidden group shadow-lg hover:shadow-purple-500/10">
+                    {/* Rank indicator */}
+                    <div className="absolute top-0 right-0 bg-gradient-to-bl from-purple-500/30 to-purple-900/40 border-b border-l border-purple-500/30 px-5 py-2 rounded-bl-2xl text-xs font-mono text-purple-300 font-bold shadow-lg">
+                      Priority #{idx + 1}
+                    </div>
+
+                    <div className="pr-24">
+                      <h4 className="text-xl font-bold text-white mb-2 group-hover:text-purple-300 transition-colors">{rec.action_name}</h4>
+                      <p className="text-sm text-purple-100/60 mb-5 leading-relaxed max-w-4xl">{rec.description}</p>
+                    </div>
+                    
+                    <div className="flex flex-wrap gap-3 mb-6">
+                      <span className={`text-xs px-3 py-1.5 rounded-md font-semibold border shadow-sm ${rec.risk_level === 'High' ? 'bg-rose-500/10 border-rose-500/30 text-rose-400' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'}`}>
+                        Risk: {rec.risk_level}
+                      </span>
+                      <span className="text-xs px-3 py-1.5 rounded-md font-semibold border shadow-sm bg-amber-500/10 border-amber-500/30 text-amber-400">
+                        Effort: {rec.difficulty}
+                      </span>
+                      <span className="text-xs px-3 py-1.5 rounded-md font-semibold border shadow-sm bg-cyan-500/10 border-cyan-500/30 text-cyan-400">
+                        {rec.timeframe}
+                      </span>
+                      {rec.is_profit_safe && (
+                        <span className="text-xs px-3 py-1.5 rounded-md font-semibold border shadow-sm bg-purple-500/10 border-purple-500/30 text-purple-400 flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Profit Safe
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                      <div className="bg-white/5 rounded-xl p-5 border border-white/5 group-hover:border-white/10 transition-colors shadow-inner">
+                        <p className="text-[11px] text-white/40 font-bold uppercase tracking-widest mb-2 flex items-center gap-2"><Target className="w-3.5 h-3.5"/> Strategic Reason</p>
+                        <p className="text-sm text-white/80 leading-relaxed">{rec.reason}</p>
+                      </div>
+                      <div className="bg-white/5 rounded-xl p-5 border border-white/5 group-hover:border-white/10 transition-colors shadow-inner">
+                        <p className="text-[11px] text-white/40 font-bold uppercase tracking-widest mb-2 flex items-center gap-2"><Activity className="w-3.5 h-3.5"/> Execution Strategy</p>
+                        <p className="text-sm text-white/80 leading-relaxed">{rec.strategy}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-8 pt-5 border-t border-white/10 mt-2">
+                      <div>
+                        <p className="text-[11px] text-emerald-400/60 font-bold uppercase tracking-widest mb-1">Estimated Growth</p>
+                        <p className="text-2xl font-mono text-emerald-400 font-bold flex items-center gap-2">
+                          <TrendingUp className="w-5 h-5" />
+                          +{rec.estimated_impact_percentage}%
+                        </p>
+                      </div>
+                      <div className="hidden md:block w-px h-10 bg-white/10"></div>
+                      <div>
+                        <p className="text-[11px] text-emerald-400/60 font-bold uppercase tracking-widest mb-1">Monthly Financial ROI</p>
+                        <p className={`text-2xl font-mono font-bold flex items-center gap-2 ${rec.financial_impact_monthly >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {rec.financial_impact_monthly >= 0 ? '+' : ''}₹{rec.financial_impact_monthly?.toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

@@ -1,11 +1,23 @@
+import os
+import sys
+import io
+
+# ── Force UTF-8 encoding on Windows (cp1252 can't handle emoji chars) ──
+# This must happen BEFORE any other imports that might print unicode.
+os.environ["PYTHONIOENCODING"] = "utf-8"
+if sys.stdout and hasattr(sys.stdout, 'buffer'):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+if sys.stderr and hasattr(sys.stderr, 'buffer'):
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Any
-import os
 from dotenv import load_dotenv
 
 # Ensure environment variables (.env) are loaded
 load_dotenv()
+
 
 from app.agents.graph import engine
 from app.agents.state import SystemState
