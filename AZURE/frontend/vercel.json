@@ -1,6 +1,14 @@
 {
   "rewrites": [
     {
+      "source": "/api/:match*",
+      "destination": "https://your-backend-api-domain.com/:match*"
+    },
+    {
+      "source": "/ai-api/:match*",
+      "destination": "https://your-ai-api-domain.com/api/v1/:match*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

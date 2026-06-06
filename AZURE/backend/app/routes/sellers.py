@@ -18,7 +18,7 @@ class SellerCreate(BaseModel):
     email:       Optional[str] = None
 
 
-@router.post("/", summary="Register a new seller")
+@router.post("/", summary="Register a new seller", dependencies=[Depends(require_api_key)])
 async def create_seller(payload: SellerCreate, db: AsyncSession = Depends(get_db)):
     try:
         # Check if seller already exists by name or email
@@ -58,7 +58,7 @@ async def create_seller(payload: SellerCreate, db: AsyncSession = Depends(get_db
         raise HTTPException(status_code=400, detail=str(traceback.format_exc()))
 
 
-@router.get("/", summary="List all sellers")
+@router.get("/", summary="List all sellers", dependencies=[Depends(require_api_key)])
 async def list_sellers(db: AsyncSession = Depends(get_db)):
     try:
         result = await db.execute(select(Seller).where(Seller.is_active == True))

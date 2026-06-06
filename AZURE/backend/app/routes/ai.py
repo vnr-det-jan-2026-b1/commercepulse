@@ -35,10 +35,10 @@ async def ai_chat(
     db: AsyncSession = Depends(get_db),
     _scope: str = Depends(enforce_seller_scope),
 ):
-    groq_api_key = settings.GROQ_API_KEY.strip().strip('"').strip("'")
-    logger.info(f"[AI Chat] Using Groq key: {groq_api_key[:8]}...{groq_api_key[-4:]} (len={len(groq_api_key)})")
-    if not groq_api_key:
-        raise HTTPException(status_code=500, detail="GROQ_API_KEY is missing from environment")
+    api_key = settings.GROQ_API_KEY
+    if not api_key:
+        logger.error("No GROQ_API_KEY configured")
+        raise HTTPException(status_code=500, detail="LLM configuration missing")
     
     ctx = request.context
     context_str = f"""
@@ -453,17 +453,6 @@ async def analyze_product(
     product_data["pricing_by_marketplace"] = clean(pricing_rows)
     product_data["revenue_by_marketplace"] = clean(marketplace_splits)
 
-    # ── Presentation Mode: Inject realistic numbers if DB metrics are exactly 0 ──
-    if product_data.get("return_rate_pct", 0) == 0:
-        product_data["return_rate_pct"] = 2.4
-    if product_data.get("avg_delivery_days", 0) == 0:
-        product_data["avg_delivery_days"] = 3.5
-    if product_data.get("rto_rate_pct", 0) == 0:
-        product_data["rto_rate_pct"] = 1.8
-    if product_data.get("total_ad_spend", 0) == 0:
-        product_data["total_ad_spend"] = 2500.0
-    if product_data.get("roas", 0) == 0:
-        product_data["roas"] = 3.2
 
     # Mark as running or create pending record
     # For now, just trigger it and wait (or background it)
@@ -511,7 +500,7 @@ async def get_product_analysis(
     Returns the latest cached AI analysis for a product.
     """
     sql = text("""
-        SELECT *
+        SELECT seller_id, product_id, analysis_date, product_metrics, executive_summary, status, created_at, updated_at
         FROM ai_product_analyses
         WHERE product_id = :product_id AND seller_id = :seller_id
         ORDER BY analysis_date DESC

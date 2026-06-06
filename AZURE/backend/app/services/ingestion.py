@@ -305,7 +305,8 @@ async def ingest_orders(db: AsyncSession, df: pd.DataFrame, seller_id: str, snap
                 "snapshot_date":       snapshot_date,
             })
             rows_inserted += 1
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Error skipping row in orders: {e}")
             rows_skipped += 1
 
     if values_list:
@@ -409,7 +410,8 @@ async def ingest_inventory(db: AsyncSession, df: pd.DataFrame, seller_id: str, s
                 "snapshot_date":     snap_date,
             })
             rows_inserted += 1
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Error skipping row in inventory: {e}")
             rows_skipped += 1
 
     if values_list:
@@ -475,7 +477,8 @@ async def ingest_pricing(db: AsyncSession, df: pd.DataFrame, seller_id: str, sna
                 "snapshot_date":       snap_date,
             })
             rows_inserted += 1
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Error skipping row in pricing: {e}")
             rows_skipped += 1
 
     if values_list:
@@ -539,7 +542,8 @@ async def ingest_traffic(db: AsyncSession, df: pd.DataFrame, seller_id: str, sna
                 "revenue_from_ads": _safe_float(row_dict.get("revenue_from_ads")),
             })
             rows_inserted += 1
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Error skipping row in traffic: {e}")
             rows_skipped += 1
 
     if values_list:
@@ -605,7 +609,8 @@ async def ingest_logistics(db: AsyncSession, df: pd.DataFrame, seller_id: str, s
                 "snapshot_date":      _parse_date(row_dict.get("snapshot_date")) or snapshot_date,
             })
             rows_inserted += 1
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Error skipping row in returns: {e}")
             rows_skipped += 1
 
     if values_list:

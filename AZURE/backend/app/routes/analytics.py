@@ -368,11 +368,11 @@ async def dashboard(
         "kpis": {
             "total_net_revenue":    float(rev["total_net_revenue"] or 0),
             "total_orders":         int(rev["total_orders"] or 0),
-            "cancellation_rate_pct":float(rev["cancellation_rate_pct"] or 0),
-            "returned_orders":      int(rev["returned_orders"] or 0) if int(rev["returned_orders"] or 0) > 0 else 12,
+            "cancellation_rate_pct": float(rev["cancellation_rate_pct"] or 0),
+            "returned_orders":      int(rev["returned_orders"] or 0),
             "low_stock_products":   int(inv["low_stock_count"] or 0),
-            "rto_rate_pct":         float(rto["rto_rate_pct"] or 0) if float(rto["rto_rate_pct"] or 0) > 0 else 1.8,
-            "avg_roas":             float(roas["avg_roas"] or 0) if float(roas["avg_roas"] or 0) > 0 else 3.2,
+            "rto_rate_pct":         float(rto["rto_rate_pct"] or 0),
+            "avg_roas":             float(roas["avg_roas"] or 0),
         },
     }
 

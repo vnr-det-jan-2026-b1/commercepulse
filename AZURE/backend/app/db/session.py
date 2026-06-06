@@ -6,8 +6,9 @@ from app.core.config import settings
 
 engine = create_async_engine(
     settings.async_db_url,
-    pool_size=2,
-    max_overflow=3,
+    pool_size=settings.DB_POOL_SIZE if hasattr(settings, "DB_POOL_SIZE") else 5,
+    max_overflow=settings.DB_MAX_OVERFLOW if hasattr(settings, "DB_MAX_OVERFLOW") else 10,
+    pool_timeout=30,
     pool_pre_ping=True, # Automatically checks if connection is alive before using it
     pool_recycle=1800,  # Recycle connections after 30 minutes to prevent timeouts
     echo=settings.APP_ENV == "development",

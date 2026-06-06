@@ -8,7 +8,7 @@ try:
         port=6543,
         dbname="postgres",
         user="postgres",
-        password="Abhilash@142",
+        password=os.environ.get("POSTGRES_PASSWORD"),
         sslmode="require",
         connect_timeout=10
     )

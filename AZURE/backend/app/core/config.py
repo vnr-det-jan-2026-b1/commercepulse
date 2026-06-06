@@ -15,7 +15,8 @@ class Settings(BaseSettings):
 
     # Application
     APP_ENV:  str = "development"
-    API_KEY:  str = "dev-api-key"
+    API_KEY: str = Field(..., env="API_KEY")
+    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:4000", "http://127.0.0.1:4000", "http://127.0.0.1:3000"]
 
     # Redis (Celery broker/result backend)
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -28,7 +29,7 @@ class Settings(BaseSettings):
     AI_AGENTS_URL: str = "http://localhost:8001"
     
     # Groq API Key
-    GROQ_API_KEY: str = "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"
+    GROQ_API_KEY: str = Field(..., env="GROQ_API_KEY")
 
     @property
     def _pw(self) -> str:

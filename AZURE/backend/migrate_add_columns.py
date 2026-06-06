@@ -19,7 +19,9 @@ POSTGRES_HOST = "aws-1-ap-south-1.pooler.supabase.com"
 POSTGRES_PORT = 5432
 POSTGRES_DB = "postgres"
 POSTGRES_USER = "postgres.gwwhksdelequvapksgqx"
-POSTGRES_PASSWORD = "Abhilash@142"
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
+if not POSTGRES_PASSWORD:
+    raise ValueError("POSTGRES_PASSWORD environment variable is not set")
 
 
 def migrate():
