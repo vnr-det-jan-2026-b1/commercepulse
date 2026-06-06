@@ -7,6 +7,7 @@ from typing import Optional
 
 from app.db.session import get_db
 from app.models.models import Seller
+from app.core.security import require_api_key
 
 router = APIRouter()
 

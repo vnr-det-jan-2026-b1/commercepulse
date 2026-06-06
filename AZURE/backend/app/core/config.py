@@ -1,6 +1,7 @@
 """Application settings via Pydantic BaseSettings."""
 from urllib.parse import quote_plus
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
 
 
 class Settings(BaseSettings):
