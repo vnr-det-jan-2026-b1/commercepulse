@@ -8,7 +8,39 @@ def create_test_dataset():
     
     # Common Product SKUs
     skus = [f"SKU-{i:04d}" for i in range(1, 21)]
-    product_names = [f"Product {i}" for i in range(1, 21)]
+    product_names = [
+        "Sony WH-1000XM5 Wireless Headphones",       # SKU-0001
+        "Apple AirPods Pro 2nd Generation",            # SKU-0002
+        "Samsung Galaxy Buds2 Pro",                    # SKU-0003
+        "JBL Charge 5 Bluetooth Speaker",              # SKU-0004
+        "Anker PowerCore 26800mAh Power Bank",         # SKU-0005
+        "Nike Air Max 270 Running Shoes",              # SKU-0006
+        "Levi's 501 Original Fit Jeans",               # SKU-0007
+        "Adidas Ultraboost 22 Sneakers",               # SKU-0008
+        "Ralph Lauren Polo Classic Fit Tee",           # SKU-0009
+        "Under Armour Tech 2.0 Workout Shirt",         # SKU-0010
+        "Dyson V15 Detect Cordless Vacuum",            # SKU-0011
+        "Instant Pot Duo 7-in-1 Pressure Cooker",     # SKU-0012
+        "Philips Sonicare DiamondClean Toothbrush",    # SKU-0013
+        "Nespresso Vertuo Next Coffee Machine",        # SKU-0014
+        "iRobot Roomba i7+ Self-Emptying Robot",       # SKU-0015
+        "CeraVe Moisturizing Cream 19oz",              # SKU-0016
+        "The Ordinary Niacinamide 10% Serum",          # SKU-0017
+        "Olaplex No.3 Hair Perfector Treatment",       # SKU-0018
+        "Neutrogena Hydro Boost Water Gel",            # SKU-0019
+        "Maybelline Lash Sensational Mascara",         # SKU-0020
+    ]
+    # Map SKU index to category: 1-5=Electronics, 6-10=Apparel, 11-15=Home, 16-20=Beauty
+    sku_categories = {
+        "SKU-0001": "Electronics", "SKU-0002": "Electronics", "SKU-0003": "Electronics",
+        "SKU-0004": "Electronics", "SKU-0005": "Electronics",
+        "SKU-0006": "Apparel", "SKU-0007": "Apparel", "SKU-0008": "Apparel",
+        "SKU-0009": "Apparel", "SKU-0010": "Apparel",
+        "SKU-0011": "Home", "SKU-0012": "Home", "SKU-0013": "Home",
+        "SKU-0014": "Home", "SKU-0015": "Home",
+        "SKU-0016": "Beauty", "SKU-0017": "Beauty", "SKU-0018": "Beauty",
+        "SKU-0019": "Beauty", "SKU-0020": "Beauty",
+    }
     categories = ["Electronics", "Apparel", "Home", "Beauty"]
     marketplaces = ["Amazon", "Shopify", "Walmart"]
     
@@ -98,8 +130,9 @@ def create_test_dataset():
     # Products reference (not typically a separate sheet in the upload but required by DB implicitly, 
     # though ingestion scripts usually upsert products from the sheets directly based on SKU)
     # The ingestion script expects: sku, product_name, category in various sheets, so let's add them to Inventory and Orders
-    df_inventory["product_name"] = df_inventory["sku"].apply(lambda s: product_names[int(s.split('-')[1])-1])
-    df_inventory["category"] = df_inventory["sku"].apply(lambda s: categories[int(s.split('-')[1]) % len(categories)])
+    sku_to_name = dict(zip(skus, product_names))
+    df_inventory["product_name"] = df_inventory["sku"].map(sku_to_name)
+    df_inventory["category"] = df_inventory["sku"].map(sku_categories)
 
     # Write to Excel
     filepath = "test_dataset.xlsx"
