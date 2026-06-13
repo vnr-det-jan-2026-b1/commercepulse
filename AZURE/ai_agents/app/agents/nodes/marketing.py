@@ -43,7 +43,7 @@ def run_marketing_agent(state: SystemState) -> dict:
         print(f"  ⚠️ Could not fetch Supabase context: {e}")
         recent_context = "No historical context available (Supabase unavailable)."
 
-    llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.1)
+    llm = ChatGroq(model="llama3-8b-8192", temperature=0.1)
     structured_llm = llm.with_structured_output(MarketingInsights)
 
     prompt = f"""
@@ -106,7 +106,7 @@ IMPORTANT: Every action in recommended_actions MUST include ALL required fields:
     for attempt in range(max_retries + 1):
         try:
             key = get_groq_api_key()
-            llm = ChatGroq(api_key=key, model="llama-3.3-70b-versatile", temperature=0.0)
+            llm = ChatGroq(api_key=key, model="llama3-8b-8192", temperature=0.0)
             from app.agents.tools.analytics_tools import fetch_live_product_roas
             llm_with_tools = llm.bind_tools([fetch_live_product_roas])
             

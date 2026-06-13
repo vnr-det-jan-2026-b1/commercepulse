@@ -54,7 +54,7 @@ Do NOT add new actions. Only correct the numbers, math, and specificity of the e
     for attempt in range(max_retries + 1):
         try:
             key = get_groq_api_key()
-            llm = ChatGroq(api_key=key, model="llama-3.3-70b-versatile", temperature=0.0).with_config(tags=["critic"])
+            llm = ChatGroq(api_key=key, model="llama3-8b-8192", temperature=0.0).with_config(tags=["critic"])
             result: ExecutiveActionPlan = llm.with_structured_output(ExecutiveActionPlan).invoke(prompt)
             if result is None:
                 return {"final_executive_plan": raw_plan}

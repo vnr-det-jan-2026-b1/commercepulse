@@ -12,7 +12,7 @@ from app.agents.state import SystemState
 # Ensure .env is loaded BEFORE reading env vars
 load_dotenv()
 
-BACKEND_URL = os.getenv("BACKEND_API_URL", "http://127.0.0.1:8010")
+BACKEND_URL = os.getenv("BACKEND_API_URL", "http://127.0.0.1:8010").rstrip("/")
 API_KEY = os.getenv("COMMERCE_API_KEY", "")
 
 _UUID_RE = re.compile(
