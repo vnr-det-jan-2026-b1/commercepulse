@@ -77,11 +77,13 @@ async def run_simulation(request: SimulationRequest):
             return {
                 "status": "success", 
                 "seller_id": request.seller_id,
-                "executive_plan": plan.model_dump()
+                "executive_plan": plan if isinstance(plan, dict) else getattr(plan, "model_dump", lambda: plan)()
             }
         else:
             return {"status": "partial", "message": "Graph completed but no executive plan was generated."}
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/v1/simulate/stream")
@@ -214,7 +216,7 @@ async def analyze_product(request: ProductAnalysisRequest):
             return {
                 "status": "success", 
                 "product_id": request.product_id,
-                "result": analysis.model_dump()
+                "result": analysis if isinstance(analysis, dict) else getattr(analysis, "model_dump", lambda: analysis)()
             }
         else:
             return {"status": "partial", "message": "Graph completed but no product analysis was generated."}
