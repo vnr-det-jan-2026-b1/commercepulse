@@ -96,12 +96,12 @@ export function DataImportPage() {
     reader.onload = (e) => {
       try {
         const data = e.target?.result;
-        const workbook = xlsx.read(data, { type: "binary" });
+        const workbook = xlsx.read(data, { type: "binary", cellDates: true });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
         
-        // Convert sheet to JSON
-        const jsonData = xlsx.utils.sheet_to_json(worksheet, { defval: "" });
+        // Convert sheet to JSON — dateNF formats Date objects as readable strings
+        const jsonData = xlsx.utils.sheet_to_json(worksheet, { defval: "", dateNF: "yyyy-mm-dd" });
         
         if (jsonData.length > 0) {
           setColumns(Object.keys(jsonData[0] as object));
@@ -371,7 +371,9 @@ export function DataImportPage() {
                     <tr key={rowIdx} className="hover:bg-gray-50/50 transition-colors">
                       {columns.map((col, colIdx) => (
                         <td key={colIdx} className="px-6 py-4 text-sm text-gray-700 whitespace-nowrap max-w-[200px] truncate">
-                          {row[col]?.toString() || "-"}
+                          {row[col] instanceof Date
+                            ? row[col].toISOString().split("T")[0]
+                            : (row[col]?.toString() || "-")}
                         </td>
                       ))}
                     </tr>
