@@ -23,7 +23,7 @@ export function AIInsights() {
           snapshot_data: {}
         };
 
-        const response = await aiApiClient.post("/api/v1/simulate", requestBody);
+        const response = await aiApiClient.post("/simulate", requestBody);
         
         if (response.status === "success" && response.executive_plan) {
           const plan = response.executive_plan;
