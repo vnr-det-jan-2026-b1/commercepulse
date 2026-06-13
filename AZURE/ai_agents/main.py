@@ -11,6 +11,7 @@ if sys.stderr and hasattr(sys.stderr, 'buffer'):
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, Any
 from dotenv import load_dotenv
@@ -25,6 +26,14 @@ from app.agents.state import SystemState
 app = FastAPI(
     title="CommercePulse AI Agents API",
     description="REST API for triggering the multi-agent LangGraph workflows."
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 @app.get("/")
