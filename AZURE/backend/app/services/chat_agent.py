@@ -12,6 +12,35 @@ from app.db.session import get_db
 
 logger = logging.getLogger(__name__)
 
+_DETECTED_BACKEND_URL = None
+
+def _get_backend_url() -> str:
+    global _DETECTED_BACKEND_URL
+    if _DETECTED_BACKEND_URL is not None:
+        return _DETECTED_BACKEND_URL
+
+    env_url = os.getenv("BACKEND_API_URL")
+    if env_url:
+        _DETECTED_BACKEND_URL = env_url.rstrip("/")
+        return _DETECTED_BACKEND_URL
+
+    # Probe ports in order of likelihood
+    import httpx
+    for port in [7860, 8000, 8010]:
+        test_url = f"http://127.0.0.1:{port}"
+        try:
+            response = httpx.get(f"{test_url}/health", timeout=0.5)
+            if response.status_code == 200:
+                _DETECTED_BACKEND_URL = test_url
+                logger.info(f"[Chat] Detected backend URL: {_DETECTED_BACKEND_URL}")
+                return _DETECTED_BACKEND_URL
+        except Exception:
+            pass
+
+    _DETECTED_BACKEND_URL = "http://127.0.0.1:7860"
+    return _DETECTED_BACKEND_URL
+
+
 # ── Tools ─────────────────────────────────────────────────────
 
 @tool
@@ -21,7 +50,7 @@ def fetch_live_product_roas(product_id: str) -> str:
     Use this tool to verify ROAS numbers.
     """
     import httpx
-    backend_url = os.getenv("BACKEND_API_URL", "http://127.0.0.1:8010").rstrip("/")
+    backend_url = _get_backend_url()
     url = f"{backend_url}/analytics/product/{product_id}/roas"
     try:
         response = httpx.get(url, timeout=5.0)
@@ -38,7 +67,7 @@ def fetch_live_product_inventory(product_id: str) -> str:
     Use this tool to verify if a product is actually out of stock.
     """
     import httpx
-    backend_url = os.getenv("BACKEND_API_URL", "http://127.0.0.1:8010").rstrip("/")
+    backend_url = _get_backend_url()
     url = f"{backend_url}/analytics/inventory/{product_id}"
     try:
         response = httpx.get(url, timeout=5.0)
@@ -55,7 +84,7 @@ def fetch_product_metrics(product_id: str, seller_id: str) -> str:
     Requires product_id and seller_id.
     """
     import httpx
-    backend_url = os.getenv("BACKEND_API_URL", "http://127.0.0.1:8010").rstrip("/")
+    backend_url = _get_backend_url()
     url = f"{backend_url}/analytics/product/{product_id}/metrics?seller_id={seller_id}"
     try:
         response = httpx.get(url, timeout=5.0)
@@ -75,7 +104,7 @@ def fetch_all_products_metrics(seller_id: str) -> str:
     Use this tool when the user asks about top-selling products, best performers, general product performance, or lists of products.
     """
     import httpx
-    backend_url = os.getenv("BACKEND_API_URL", "http://127.0.0.1:8010").rstrip("/")
+    backend_url = _get_backend_url()
     url = f"{backend_url}/analytics/products/list?seller_id={seller_id}"
     try:
         response = httpx.get(url, timeout=5.0)
