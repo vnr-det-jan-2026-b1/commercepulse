@@ -63,6 +63,28 @@ def fetch_product_metrics(product_id: str, seller_id: str) -> str:
         return f"Could not fetch product metrics due to API error: {str(e)}."
 
 
+from langchain_core.runnables import RunnableLambda
+
+def make_fallback_runnable(primary, fallback):
+    def invoke_fn(input, config=None, **kwargs):
+        try:
+            return primary.invoke(input, config, **kwargs)
+        except Exception as e:
+            import logging
+            logging.getLogger("fallback").warning(f"Primary model failed: {e}. Falling back...")
+            return fallback.invoke(input, config, **kwargs)
+
+    async def ainvoke_fn(input, config=None, **kwargs):
+        try:
+            return await primary.ainvoke(input, config, **kwargs)
+        except Exception as e:
+            import logging
+            logging.getLogger("fallback").warning(f"Primary model failed: {e}. Falling back...")
+            return await fallback.ainvoke(input, config, **kwargs)
+
+    return RunnableLambda(invoke_fn, afunc=ainvoke_fn)
+
+
 class FallbackChatGroq:
     def __init__(self, primary: ChatGroq, fallback: ChatGroq):
         self.primary = primary
@@ -71,15 +93,18 @@ class FallbackChatGroq:
     def bind_tools(self, tools, **kwargs):
         bound_primary = self.primary.bind_tools(tools, **kwargs)
         bound_fallback = self.fallback.bind_tools(tools, **kwargs)
-        return bound_primary.with_fallbacks([bound_fallback])
+        return make_fallback_runnable(bound_primary, bound_fallback)
 
     def with_structured_output(self, schema, **kwargs):
         struct_primary = self.primary.with_structured_output(schema, **kwargs)
         struct_fallback = self.fallback.with_structured_output(schema, **kwargs)
-        return struct_primary.with_fallbacks([struct_fallback])
+        return make_fallback_runnable(struct_primary, struct_fallback)
 
     def invoke(self, messages, **kwargs):
-        return self.primary.with_fallbacks([self.fallback]).invoke(messages, **kwargs)
+        return make_fallback_runnable(self.primary, self.fallback).invoke(messages, **kwargs)
+
+    def ainvoke(self, messages, **kwargs):
+        return make_fallback_runnable(self.primary, self.fallback).ainvoke(messages, **kwargs)
 
 
 def get_chat_agent():
