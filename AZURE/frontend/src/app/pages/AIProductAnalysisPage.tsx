@@ -5,7 +5,7 @@ import {
   Target, Globe, Lightbulb, Activity, ShoppingCart, Truck, RotateCcw,
   IndianRupee, MousePointerClick, Package, BarChart3, Store, Sparkles, Loader2
 } from "lucide-react";
-import { getProductAnalysis, ensureSeller, triggerProductAnalysis, fetchProductsWithAnalysis } from "../services/api";
+import { getProductAnalysis, ensureSeller, triggerProductAnalysis, getProductMetrics } from "../services/api";
 
 export function AIProductAnalysisPage() {
   const { id: productId } = useParams<{ id: string }>();
@@ -24,16 +24,18 @@ export function AIProductAnalysisPage() {
     try {
       setLoading(true);
       const sellerId = await ensureSeller();
+      
+      // Always fetch live metrics so we don't show stale/zeroed DB metrics
+      try {
+        const metricsData = await getProductMetrics(sellerId, productId);
+        setProductDetails(metricsData);
+      } catch (e) {
+        console.error("Metrics fetch failed", e);
+      }
+
       const res = await getProductAnalysis(sellerId, productId);
       if (res.status === 'success') {
         setData(res.data);
-      } else {
-        // Fallback: fetch basic product info and metrics
-        const listRes = await fetchProductsWithAnalysis(sellerId);
-        const prod = listRes.data?.find((p: any) => p.product_id === productId);
-        if (prod) {
-          setProductDetails(prod);
-        }
       }
     } catch (error) {
       console.error("Failed to load product analysis:", error);
@@ -84,15 +86,15 @@ export function AIProductAnalysisPage() {
   }
 
   const hasAnalysis = !!(data && data.executive_summary);
-  const metrics = data?.product_metrics || {
-    product_name: productDetails?.product_name || "Whole Bean Coffee",
-    sku: productDetails?.sku || "",
-    category: productDetails?.category || "Coffee",
-    total_revenue: productDetails?.total_revenue || 0,
-    total_orders: productDetails?.total_orders || 0,
-    margin_pct: productDetails?.margin_pct || 0,
-    stock_level: productDetails?.stock_level || 0,
-    roas: productDetails?.roas || 0,
+  const metrics = productDetails || data?.product_metrics || {
+    product_name: "Whole Bean Coffee",
+    sku: "",
+    category: "Coffee",
+    total_revenue: 0,
+    total_orders: 0,
+    margin_pct: 0,
+    stock_level: 0,
+    roas: 0,
   };
   const ai = data?.executive_summary || {};
   const recommendations = ai.recommendations || [];

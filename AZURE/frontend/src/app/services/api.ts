@@ -151,3 +151,7 @@ export async function triggerProductAnalysis(sellerId: string, productId: string
 export async function getProductAnalysis(sellerId: string, productId: string) {
   return await apiClient.get(`/ai/analysis/${productId}?seller_id=${sellerId}`);
 }
+
+export async function getProductMetrics(sellerId: string, productId: string) {
+  return await apiClient.get(`/analytics/product/${productId}/metrics?seller_id=${sellerId}`);
+}

@@ -74,10 +74,17 @@ async def run_simulation(request: SimulationRequest):
         # Extract the Pydantic plan object output from the Synthesizer
         plan = final_state.get("final_executive_plan")
         if plan:
+            if hasattr(plan, "model_dump"):
+                plan_data = plan.model_dump()
+            elif hasattr(plan, "dict"):
+                plan_data = plan.dict()
+            else:
+                plan_data = plan
+
             return {
                 "status": "success", 
                 "seller_id": request.seller_id,
-                "executive_plan": plan if isinstance(plan, dict) else getattr(plan, "model_dump", lambda: plan)()
+                "executive_plan": plan_data
             }
         else:
             return {"status": "partial", "message": "Graph completed but no executive plan was generated."}
@@ -213,10 +220,17 @@ async def analyze_product(request: ProductAnalysisRequest):
         # Extract the ProductAnalysisResult object
         analysis = final_state.get("product_analysis")
         if analysis:
+            if hasattr(analysis, "model_dump"):
+                analysis_data = analysis.model_dump()
+            elif hasattr(analysis, "dict"):
+                analysis_data = analysis.dict()
+            else:
+                analysis_data = analysis
+
             return {
                 "status": "success", 
                 "product_id": request.product_id,
-                "result": analysis if isinstance(analysis, dict) else getattr(analysis, "model_dump", lambda: analysis)()
+                "result": analysis_data
             }
         else:
             return {"status": "partial", "message": "Graph completed but no product analysis was generated."}

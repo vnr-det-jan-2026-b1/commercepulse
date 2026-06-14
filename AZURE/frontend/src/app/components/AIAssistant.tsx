@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Sparkles, X, Send, Minimize2, Maximize2, Loader2 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { ensureSeller, apiClient } from "../services/api";
 
 const sampleQuestions = [
@@ -49,10 +51,22 @@ export function AIAssistant() {
 
   const callGroqAPI = async (userMessage: string, chatHistory: any[]) => {
     const sellerId = await ensureSeller();
+    
+    // Inject dynamic routing context
+    const currentPath = window.location.pathname;
+    let productId = 'None';
+    if (currentPath.includes('/ai/product/')) {
+        productId = currentPath.split('/').pop() || 'None';
+    }
+
     const payload = {
       message: userMessage,
       history: chatHistory.filter(m => m.type !== 'system'),
-      context: contextData || {}
+      context: {
+          ...contextData,
+          current_page: currentPath,
+          product_id: productId
+      }
     };
 
     const response = await apiClient.post(`/ai/chat?seller_id=${sellerId}`, payload);
@@ -145,10 +159,21 @@ export function AIAssistant() {
                       ? "bg-purple-600 text-white rounded-tr-sm"
                       : message.type === "system"
                       ? "bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs"
-                      : "bg-white/10 text-gray-100 border border-white/5 rounded-tl-sm"
+                      : "bg-white/10 text-gray-100 border border-white/5 rounded-tl-sm prose prose-invert prose-sm max-w-none"
                   }`}
                 >
-                  <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.text}</p>
+                  {message.type === "ai" ? (
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={{
+                      p: ({node, ...props}) => <p className="mb-2 last:mb-0" {...props} />,
+                      ul: ({node, ...props}) => <ul className="list-disc pl-4 mb-2 last:mb-0" {...props} />,
+                      ol: ({node, ...props}) => <ol className="list-decimal pl-4 mb-2 last:mb-0" {...props} />,
+                      li: ({node, ...props}) => <li className="mb-1" {...props} />
+                    }}>
+                      {message.text}
+                    </ReactMarkdown>
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.text}</p>
+                  )}
                 </div>
               </div>
             ))}

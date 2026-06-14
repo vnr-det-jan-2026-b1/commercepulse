@@ -35,11 +35,13 @@ async def ai_chat(
     db: AsyncSession = Depends(get_db),
     _scope: str = Depends(enforce_seller_scope),
 ):
-    api_key = settings.GROQ_API_KEY
-    if not api_key:
-        logger.error("No GROQ_API_KEY configured")
-        raise HTTPException(status_code=500, detail="LLM configuration missing")
-    
+    try:
+        from app.services.chat_agent import get_chat_agent
+        agent_executor = get_chat_agent()
+    except Exception as e:
+        logger.error(f"Failed to initialize chat agent: {e}")
+        raise HTTPException(status_code=500, detail="Failed to initialize chat agent")
+
     ctx = request.context
     context_str = f"""
 - Total Revenue (Current Available Data): ₹{ctx.get('total_revenue', 0):,}
@@ -47,81 +49,29 @@ async def ai_chat(
 - Return Rate: {ctx.get('return_rate_pct', 0)}%
 - Avg Margin: {ctx.get('avg_margin_pct', 0)}%
 - Avg ROAS: {ctx.get('avg_roas', 0)}
+- Current Page Path: {ctx.get('current_page', 'Dashboard')}
+- Current Product ID (if applicable): {ctx.get('product_id', 'None')}
+- Current Product Name (if applicable): {ctx.get('product_name', 'None')}
 """
     
-    system_prompt = f"""You are an elite, highly aggressive Senior Business Analyst & Strategist for a D2C brand named "Brew Boulevard". 
-Your job is to answer the user's questions strictly based on their real data.
-Be concise, highly professional, use bullet points if needed, and reference actual Rs amounts, percentages, and units.
-
-Here is the LIVE DATA context for Brew Boulevard:
-{context_str}
-
-Rules:
-1. Do not hallucinate metrics. Assume the LIVE DATA provided is the most current and relevant data for the user's query (even if they ask about "this month" or "recently"). Do not complain about missing data for specific timeframes.
-2. Be aggressive about growth and protecting margins. Focus on profitability, ROAS optimization, and high-impact actions.
-3. Keep responses under 200 words unless explaining a complex multi-step strategy.
-4. Always reference actual financial numbers (Rs amounts) to back up your claims.
-5. Provide extremely actionable, data-driven advice for D2C scaling."""
-
-    messages = [{"role": "system", "content": system_prompt}]
-    
+    chat_history = []
+    from langchain_core.messages import HumanMessage, AIMessage
     for msg in request.history:
-        messages.append({
-            "role": "assistant" if msg.get("type") == "ai" else "user",
-            "content": msg.get("text", "")
+        if msg.get("type") == "ai":
+            chat_history.append(AIMessage(content=msg.get("text", "")))
+        else:
+            chat_history.append(HumanMessage(content=msg.get("text", "")))
+            
+    try:
+        result = agent_executor.invoke({
+            "input": request.message,
+            "chat_history": chat_history,
+            "context_str": context_str
         })
-        
-    messages.append({"role": "user", "content": request.message})
-
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": "llama-3.3-70b-versatile",
-                    "messages": messages,
-                    "temperature": 0.2,
-                    "max_tokens": 800,
-                },
-                timeout=45.0
-            )
-            response.raise_for_status()
-            data = response.json()
-            return {"reply": data["choices"][0]["message"]["content"]}
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 429:
-                logger.warning("70b rate limit hit, falling back to 8b-instant")
-                try:
-                    fallback_response = await client.post(
-                        "https://api.groq.com/openai/v1/chat/completions",
-                        headers={
-                            "Authorization": f"Bearer {api_key}",
-                            "Content-Type": "application/json"
-                        },
-                        json={
-                            "model": "llama-3.1-8b-instant",
-                            "messages": messages,
-                            "temperature": 0.2,
-                            "max_tokens": 800,
-                        },
-                        timeout=45.0
-                    )
-                    fallback_response.raise_for_status()
-                    data = fallback_response.json()
-                    return {"reply": data["choices"][0]["message"]["content"]}
-                except Exception as fallback_err:
-                    logger.error(f"Groq API Error on fallback: {str(fallback_err)}")
-                    raise HTTPException(status_code=500, detail=str(fallback_err))
-            else:
-                logger.error(f"Groq API Error: {str(e)}")
-                raise HTTPException(status_code=500, detail=str(e))
-        except Exception as e:
-            logger.error(f"Groq API Error: {str(e)}")
-            raise HTTPException(status_code=500, detail=str(e))
+        return {"reply": result["output"]}
+    except Exception as e:
+        logger.error(f"Agent Execution Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ── Embed a single product snapshot ───────────────────────────
