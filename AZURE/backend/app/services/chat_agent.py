@@ -63,17 +63,43 @@ def fetch_product_metrics(product_id: str, seller_id: str) -> str:
         return f"Could not fetch product metrics due to API error: {str(e)}."
 
 
+class FallbackChatGroq:
+    def __init__(self, primary: ChatGroq, fallback: ChatGroq):
+        self.primary = primary
+        self.fallback = fallback
+
+    def bind_tools(self, tools, **kwargs):
+        bound_primary = self.primary.bind_tools(tools, **kwargs)
+        bound_fallback = self.fallback.bind_tools(tools, **kwargs)
+        return bound_primary.with_fallbacks([bound_fallback])
+
+    def with_structured_output(self, schema, **kwargs):
+        struct_primary = self.primary.with_structured_output(schema, **kwargs)
+        struct_fallback = self.fallback.with_structured_output(schema, **kwargs)
+        return struct_primary.with_fallbacks([struct_fallback])
+
+    def invoke(self, messages, **kwargs):
+        return self.primary.with_fallbacks([self.fallback]).invoke(messages, **kwargs)
+
+
 def get_chat_agent():
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         raise ValueError("GROQ_API_KEY is missing")
     
-    llm = ChatGroq(
+    primary = ChatGroq(
         api_key=api_key,
         model="llama-3.3-70b-versatile",
         temperature=0.2,
         max_tokens=800
     )
+    fallback = ChatGroq(
+        api_key=api_key,
+        model="llama3-8b-8192",
+        temperature=0.2,
+        max_tokens=800
+    )
+    llm = FallbackChatGroq(primary, fallback)
     
     tools = [fetch_live_product_roas, fetch_live_product_inventory, fetch_product_metrics]
     
