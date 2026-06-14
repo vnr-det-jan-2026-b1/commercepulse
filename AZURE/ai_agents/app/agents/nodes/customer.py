@@ -45,8 +45,7 @@ def run_customer_agent(state: SystemState) -> dict:
         print(f"  ⚠️ Could not fetch Supabase context: {e}")
         recent_context = "No historical context available (Supabase unavailable)."
 
-    llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.1).with_fallbacks([ChatGroq(model="llama3-8b-8192", temperature=0.1)])
-    structured_llm = llm.with_structured_output(MarketInsights)
+    # Set up lazy structured model inside retry loop below
 
     prompt = f"""
 You are the Chief Brand Strategist of "Brew Boulevard", a D2C specialty coffee brand selling on Amazon India, Flipkart, and their own Shopify store. The brand sells 15 coffee products across categories like Whole Bean, Ground, Cold Brew, Instant, and Drip Bags.
@@ -99,14 +98,14 @@ Reference actual product names, prices, and marketplace data from above. Do NOT 
 IMPORTANT: Every action in recommended_actions MUST include ALL required fields: action_name, reason, strategy, description, estimated_impact_percentage, financial_impact_monthly, is_profit_safe, risk_level, difficulty, timeframe. Do NOT omit any field.
 """
 
-    from app.utils import get_groq_api_key
+    from app.utils import get_groq_api_key, get_fallback_llm
     
     import time
     max_retries = 3
     for attempt in range(max_retries + 1):
         try:
             key = get_groq_api_key()
-            llm = ChatGroq(api_key=key, model="llama-3.3-70b-versatile", temperature=0.1).with_fallbacks([ChatGroq(api_key=key, model="llama3-8b-8192", temperature=0.1)])
+            llm = get_fallback_llm(api_key=key, temperature=0.1)
             result: MarketInsights = llm.with_structured_output(MarketInsights).invoke(prompt)
             return {"market_insights": result}
         except Exception as e:

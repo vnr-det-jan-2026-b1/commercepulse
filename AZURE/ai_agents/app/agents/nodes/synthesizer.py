@@ -112,7 +112,8 @@ Think like a bootstrapped founder, not a consultant. Be direct, specific, and ag
     for attempt in range(max_retries + 1):
         try:
             key = get_groq_api_key()
-            llm = ChatGroq(api_key=key, model="llama-3.3-70b-versatile", temperature=0.1).with_fallbacks([ChatGroq(api_key=key, model="llama3-8b-8192", temperature=0.1)]).with_config(tags=["synthesizer"])
+            from app.utils import get_fallback_llm
+            llm = get_fallback_llm(api_key=key, temperature=0.1).with_config(tags=["synthesizer"])
             result: ExecutiveActionPlan = llm.with_structured_output(ExecutiveActionPlan).invoke(prompt)
             if result is None:
                 print("⚠️ [Synthesizer] LLM returned None. Falling back to empty plan.")

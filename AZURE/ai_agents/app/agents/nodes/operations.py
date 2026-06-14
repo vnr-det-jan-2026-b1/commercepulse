@@ -94,7 +94,8 @@ Use ONLY the real data provided. Do NOT make up numbers. If a data section is em
     for attempt in range(max_retries + 1):
         try:
             key = get_groq_api_key()
-            llm = ChatGroq(api_key=key, model="llama-3.3-70b-versatile", temperature=0.0).with_fallbacks([ChatGroq(api_key=key, model="llama3-8b-8192", temperature=0.0)])
+            from app.utils import get_fallback_llm
+            llm = get_fallback_llm(api_key=key, temperature=0.0)
             result: OperationsInsights = llm.with_structured_output(OperationsInsights).invoke(prompt)
             return {"ops_insights": result}
         except Exception as e:

@@ -44,9 +44,7 @@ def run_revenue_agent(state: SystemState) -> dict:
         print(f"  ⚠️ Could not fetch Supabase context: {e}")
         recent_context = "No historical context available (Supabase unavailable)."
 
-    from app.utils import get_groq_api_key
-    llm = ChatGroq(api_key=get_groq_api_key(), model="llama-3.3-70b-versatile", temperature=0.0).with_fallbacks([ChatGroq(api_key=get_groq_api_key(), model="llama3-8b-8192", temperature=0.0)])
-    structured_llm = llm.with_structured_output(RevenueInsights)
+    # Set up structured model inside retry loop below
 
     prompt = f"""
 You are the Chief Financial Officer (CFO) of a D2C (Direct-to-Consumer) brand selling specialty coffee products across Indian marketplaces (Amazon India, Flipkart, and their own Shopify store).
@@ -99,7 +97,8 @@ IMPORTANT: Every action in recommended_actions MUST include ALL required fields:
     for attempt in range(max_retries + 1):
         try:
             key = get_groq_api_key()
-            llm = ChatGroq(api_key=key, model="llama-3.3-70b-versatile", temperature=0.0).with_fallbacks([ChatGroq(api_key=key, model="llama3-8b-8192", temperature=0.0)])
+            from app.utils import get_fallback_llm
+            llm = get_fallback_llm(api_key=key, temperature=0.0)
             from app.agents.tools.analytics_tools import fetch_live_product_inventory
             llm_with_tools = llm.bind_tools([fetch_live_product_inventory])
             

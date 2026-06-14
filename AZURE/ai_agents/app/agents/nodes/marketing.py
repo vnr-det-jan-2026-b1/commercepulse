@@ -43,8 +43,7 @@ def run_marketing_agent(state: SystemState) -> dict:
         print(f"  ⚠️ Could not fetch Supabase context: {e}")
         recent_context = "No historical context available (Supabase unavailable)."
 
-    llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.1).with_fallbacks([ChatGroq(model="llama3-8b-8192", temperature=0.1)])
-    structured_llm = llm.with_structured_output(MarketingInsights)
+    # Set up lazy structured model inside retry loop below
 
     prompt = f"""
 You are the Chief Marketing Officer (CMO) of "Brew Boulevard", a D2C specialty coffee brand in India. You manage ad spend across Amazon Sponsored Ads, Flipkart Ads, and Google/Meta ads for the Shopify store.
@@ -99,14 +98,14 @@ Do NOT give abstract marketing advice. Use the REAL numbers provided.
 IMPORTANT: Every action in recommended_actions MUST include ALL required fields: action_name, reason, strategy, description, estimated_impact_percentage, financial_impact_monthly, is_profit_safe, risk_level, difficulty, timeframe. Do NOT omit any field.
 """
 
-    from app.utils import get_groq_api_key
+    from app.utils import get_groq_api_key, get_fallback_llm
     
     import time
     max_retries = 3
     for attempt in range(max_retries + 1):
         try:
             key = get_groq_api_key()
-            llm = ChatGroq(api_key=key, model="llama-3.3-70b-versatile", temperature=0.0).with_fallbacks([ChatGroq(api_key=key, model="llama3-8b-8192", temperature=0.0)])
+            llm = get_fallback_llm(api_key=key, temperature=0.0)
             from app.agents.tools.analytics_tools import fetch_live_product_roas
             llm_with_tools = llm.bind_tools([fetch_live_product_roas])
             

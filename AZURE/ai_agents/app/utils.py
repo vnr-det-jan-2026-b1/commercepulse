@@ -1,6 +1,7 @@
 import os
 import random
 from dotenv import load_dotenv
+from langchain_groq import ChatGroq
 
 load_dotenv()
 
@@ -24,3 +25,34 @@ def get_groq_api_key():
         raise ValueError("No valid GROQ_API_KEY found in .env")
         
     return random.choice(valid_keys)
+
+class FallbackChatGroq:
+    def __init__(self, primary: ChatGroq, fallback: ChatGroq):
+        self.primary = primary
+        self.fallback = fallback
+
+    def bind_tools(self, tools, **kwargs):
+        bound_primary = self.primary.bind_tools(tools, **kwargs)
+        bound_fallback = self.fallback.bind_tools(tools, **kwargs)
+        return bound_primary.with_fallbacks([bound_fallback])
+
+    def with_structured_output(self, schema, **kwargs):
+        struct_primary = self.primary.with_structured_output(schema, **kwargs)
+        struct_fallback = self.fallback.with_structured_output(schema, **kwargs)
+        return struct_primary.with_fallbacks([struct_fallback])
+
+    def with_config(self, config=None, **kwargs):
+        conf = config or {}
+        conf.update(kwargs)
+        cfg_primary = self.primary.with_config(conf)
+        cfg_fallback = self.fallback.with_config(conf)
+        return FallbackChatGroq(cfg_primary, cfg_fallback)
+
+    def invoke(self, messages, **kwargs):
+        return self.primary.with_fallbacks([self.fallback]).invoke(messages, **kwargs)
+
+def get_fallback_llm(api_key: str = None, temperature: float = 0.0) -> FallbackChatGroq:
+    key = api_key or get_groq_api_key()
+    primary = ChatGroq(api_key=key, model="llama-3.3-70b-versatile", temperature=temperature)
+    fallback = ChatGroq(api_key=key, model="llama3-8b-8192", temperature=temperature)
+    return FallbackChatGroq(primary, fallback)
