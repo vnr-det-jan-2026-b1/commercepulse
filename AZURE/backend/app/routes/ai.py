@@ -44,6 +44,7 @@ async def ai_chat(
 
     ctx = request.context
     context_str = f"""
+- Seller ID: {seller_id}
 - Total Revenue (Current Available Data): ₹{ctx.get('total_revenue', 0):,}
 - Total Orders: {ctx.get('total_orders', 0)}
 - Return Rate: {ctx.get('return_rate_pct', 0)}%

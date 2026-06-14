@@ -62,6 +62,26 @@ def fetch_product_metrics(product_id: str, seller_id: str) -> str:
     except Exception as e:
         return f"Could not fetch product metrics due to API error: {str(e)}."
 
+@tool
+def fetch_all_products_metrics(seller_id: str) -> str:
+    """
+    Fetches the metrics for all products owned by the seller, including product ID, name, SKU, total revenue, total orders, ROAS, and inventory stock level.
+    Use this tool when the user asks about top-selling products, best performers, general product performance, or lists of products.
+    """
+    import httpx
+    backend_url = os.getenv("BACKEND_API_URL", "http://127.0.0.1:8010").rstrip("/")
+    url = f"{backend_url}/analytics/products/list?seller_id={seller_id}"
+    try:
+        response = httpx.get(url, timeout=5.0)
+        if response.status_code == 404:
+            return "Seller or products not found."
+        response.raise_for_status()
+        data = response.json()
+        import json
+        return f"All products metrics: {json.dumps(data.get('data', []))}"
+    except Exception as e:
+        return f"Could not fetch all products metrics due to API error: {str(e)}."
+
 
 from langchain_core.runnables import RunnableLambda
 
@@ -126,7 +146,7 @@ def get_chat_agent():
     )
     llm = FallbackChatGroq(primary, fallback)
     
-    tools = [fetch_live_product_roas, fetch_live_product_inventory, fetch_product_metrics]
+    tools = [fetch_live_product_roas, fetch_live_product_inventory, fetch_product_metrics, fetch_all_products_metrics]
     
     prompt = ChatPromptTemplate.from_messages([
         ("system", """You are an elite, highly aggressive Senior Business Analyst & Strategist for a D2C brand named "Brew Boulevard". 
@@ -145,6 +165,7 @@ Rules:
 4. Always reference actual financial numbers (Rs amounts) to back up your claims.
 5. Provide extremely actionable, data-driven advice for D2C scaling.
 6. If the user asks about a specific product, USE your `fetch_product_metrics` tool to get the full picture, do NOT just guess.
+7. If the user asks about overall product metrics, top selling products, or general catalog queries, USE the `fetch_all_products_metrics` tool to get the full product catalog metrics before answering. Use the Seller ID from the context.
 """),
         ("placeholder", "{chat_history}"),
         ("human", "{input}"),
