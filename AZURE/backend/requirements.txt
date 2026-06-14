@@ -36,3 +36,8 @@ httpx
 
 # Caching
 fastapi-cache2[redis]==0.2.1
+
+# AI / LangChain
+langchain-core>=0.1.38,<0.2.0
+langchain-groq>=0.1.3
+langchain>=0.1.0
