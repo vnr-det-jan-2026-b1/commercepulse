@@ -71,7 +71,11 @@ async def ai_chat(
         })
         return {"reply": result["output"]}
     except Exception as e:
+        error_str = str(e).lower()
         logger.error(f"Agent Execution Error: {str(e)}")
+        # Detect rate limit errors and return a graceful message instead of 500
+        if "429" in error_str or "rate limit" in error_str or "rate_limit" in error_str:
+            return {"reply": "⏳ **Rate Limit Reached** — The AI engine is currently experiencing high demand across all available API keys. Please wait **30 seconds** and try again. Your data is safe and ready to analyze.\n\n*Tip: Shorter, focused questions use fewer tokens and are less likely to be rate-limited.*"}
         raise HTTPException(status_code=500, detail=str(e))
 
 

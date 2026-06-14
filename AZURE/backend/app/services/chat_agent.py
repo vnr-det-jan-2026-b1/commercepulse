@@ -1,13 +1,19 @@
 import os
+import time
+import logging
 from langchain_core.tools import tool
 from langchain_groq import ChatGroq
 from langchain.agents import create_tool_calling_agent, AgentExecutor
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnableLambda
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from app.db.session import get_db
 
-# Tools
+logger = logging.getLogger(__name__)
+
+# ── Tools ─────────────────────────────────────────────────────
+
 @tool
 def fetch_live_product_roas(product_id: str) -> str:
     """
@@ -83,74 +89,155 @@ def fetch_all_products_metrics(seller_id: str) -> str:
         return f"Could not fetch all products metrics due to API error: {str(e)}."
 
 
-from langchain_core.runnables import RunnableLambda
+# ── Multi-Key Resilient Fallback System ───────────────────────
 
-def make_fallback_runnable(primary, fallback):
+def _collect_api_keys():
+    """Collect all available Groq API keys from environment variables."""
+    keys = []
+    # Primary key
+    primary = os.getenv("GROQ_API_KEY")
+    if primary:
+        keys.append(primary)
+    # Additional keys (numbered)
+    for suffix in ["GROQ_API_KEY_2", "GROQ_API_KEY_3"]:
+        k = os.getenv(suffix)
+        if k and k not in keys:
+            keys.append(k)
+    # Dedicated fallback key
+    fallback = os.getenv("FALLBACK_GROQ_API_KEY")
+    if fallback and fallback not in keys:
+        keys.append(fallback)
+    return keys
+
+
+def _is_rate_limit_error(e: Exception) -> bool:
+    """Check if an exception is a 429 rate limit error."""
+    err_str = str(e).lower()
+    return "429" in err_str or "rate limit" in err_str or "rate_limit" in err_str
+
+
+def _parse_retry_after(e: Exception) -> float:
+    """Try to parse the retry-after time from a rate limit error message."""
+    import re
+    err_str = str(e)
+    match = re.search(r"try again in (\d+\.?\d*)", err_str, re.IGNORECASE)
+    if match:
+        return min(float(match.group(1)), 30.0)  # Cap at 30 seconds
+    return 5.0  # Default wait
+
+
+def make_resilient_runnable(model_configs):
+    """
+    Creates a runnable that tries multiple model+key combinations.
+    model_configs: list of (ChatGroq_instance, description_str) tuples.
+    If ALL fail, returns a graceful error message instead of crashing.
+    """
+
     def invoke_fn(input, config=None, **kwargs):
-        try:
-            return primary.invoke(input, config, **kwargs)
-        except Exception as e:
-            import logging
-            logging.getLogger("fallback").warning(f"Primary model failed: {e}. Falling back...")
-            return fallback.invoke(input, config, **kwargs)
+        last_error = None
+        for model, desc in model_configs:
+            try:
+                return model.invoke(input, config, **kwargs)
+            except Exception as e:
+                last_error = e
+                if _is_rate_limit_error(e):
+                    wait = _parse_retry_after(e)
+                    logger.warning(f"[Chat] {desc} hit rate limit. Waiting {wait:.1f}s before trying next key...")
+                    time.sleep(min(wait, 3.0))  # Brief pause before trying next key
+                else:
+                    logger.error(f"[Chat] {desc} failed with non-rate-limit error: {e}")
+        # All models exhausted
+        logger.error(f"[Chat] ALL model/key combinations exhausted. Last error: {last_error}")
+        raise last_error
 
     async def ainvoke_fn(input, config=None, **kwargs):
-        try:
-            return await primary.ainvoke(input, config, **kwargs)
-        except Exception as e:
-            import logging
-            logging.getLogger("fallback").warning(f"Primary model failed: {e}. Falling back...")
-            return await fallback.ainvoke(input, config, **kwargs)
+        import asyncio
+        last_error = None
+        for model, desc in model_configs:
+            try:
+                return await model.ainvoke(input, config, **kwargs)
+            except Exception as e:
+                last_error = e
+                if _is_rate_limit_error(e):
+                    wait = _parse_retry_after(e)
+                    logger.warning(f"[Chat] {desc} hit rate limit. Waiting {wait:.1f}s before trying next key...")
+                    await asyncio.sleep(min(wait, 3.0))
+                else:
+                    logger.error(f"[Chat] {desc} failed with non-rate-limit error: {e}")
+        logger.error(f"[Chat] ALL model/key combinations exhausted. Last error: {last_error}")
+        raise last_error
 
     return RunnableLambda(invoke_fn, afunc=ainvoke_fn)
 
 
-class FallbackChatGroq:
-    def __init__(self, primary: ChatGroq, fallback: ChatGroq):
-        self.primary = primary
-        self.fallback = fallback
+class ResilientChatGroq:
+    """
+    A ChatGroq wrapper that rotates through multiple API keys and models.
+    Tries each key with the primary model first, then each key with the fallback model.
+    """
+
+    def __init__(self, model_configs):
+        """model_configs: list of (ChatGroq, description) tuples"""
+        self.model_configs = model_configs
 
     def bind_tools(self, tools, **kwargs):
-        bound_primary = self.primary.bind_tools(tools, **kwargs)
-        bound_fallback = self.fallback.bind_tools(tools, **kwargs)
-        return make_fallback_runnable(bound_primary, bound_fallback)
+        bound_configs = []
+        for model, desc in self.model_configs:
+            bound_configs.append((model.bind_tools(tools, **kwargs), desc))
+        return make_resilient_runnable(bound_configs)
 
     def with_structured_output(self, schema, **kwargs):
-        struct_primary = self.primary.with_structured_output(schema, **kwargs)
-        struct_fallback = self.fallback.with_structured_output(schema, **kwargs)
-        return make_fallback_runnable(struct_primary, struct_fallback)
+        struct_configs = []
+        for model, desc in self.model_configs:
+            struct_configs.append((model.with_structured_output(schema, **kwargs), desc))
+        return make_resilient_runnable(struct_configs)
 
     def invoke(self, messages, **kwargs):
-        return make_fallback_runnable(self.primary, self.fallback).invoke(messages, **kwargs)
+        return make_resilient_runnable(self.model_configs).invoke(messages, **kwargs)
 
     def ainvoke(self, messages, **kwargs):
-        return make_fallback_runnable(self.primary, self.fallback).ainvoke(messages, **kwargs)
+        return make_resilient_runnable(self.model_configs).ainvoke(messages, **kwargs)
 
+
+# ── Agent Factory ─────────────────────────────────────────────
 
 def get_chat_agent():
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        raise ValueError("GROQ_API_KEY is missing")
-    
-    primary = ChatGroq(
-        api_key=api_key,
-        model="llama-3.3-70b-versatile",
-        temperature=0.2,
-        max_tokens=800
-    )
-    fallback_api_key = os.getenv("FALLBACK_GROQ_API_KEY")
-    if not fallback_api_key:
-        fallback_api_key = api_key # fallback to primary api key if fallback api key is not set
-    fallback = ChatGroq(
-        api_key=fallback_api_key,
-        model="llama-3.1-8b-instant",
-        temperature=0.2,
-        max_tokens=800
-    )
-    llm = FallbackChatGroq(primary, fallback)
-    
+    api_keys = _collect_api_keys()
+    if not api_keys:
+        raise ValueError("No Groq API keys found. Set GROQ_API_KEY or FALLBACK_GROQ_API_KEY.")
+
+    # Build model configs: try each key with primary model, then each key with fallback model
+    PRIMARY_MODEL = "llama-3.3-70b-versatile"
+    FALLBACK_MODEL = "llama-3.1-8b-instant"
+
+    model_configs = []
+
+    # Phase 1: Try all keys with the powerful primary model
+    for i, key in enumerate(api_keys):
+        model = ChatGroq(
+            api_key=key,
+            model=PRIMARY_MODEL,
+            temperature=0.2,
+            max_tokens=800,
+        )
+        model_configs.append((model, f"Key#{i+1}/{PRIMARY_MODEL}"))
+
+    # Phase 2: Try all keys with the lighter fallback model
+    for i, key in enumerate(api_keys):
+        model = ChatGroq(
+            api_key=key,
+            model=FALLBACK_MODEL,
+            temperature=0.2,
+            max_tokens=800,
+        )
+        model_configs.append((model, f"Key#{i+1}/{FALLBACK_MODEL}"))
+
+    logger.info(f"[Chat] Initialized with {len(api_keys)} API keys × 2 models = {len(model_configs)} fallback combinations.")
+
+    llm = ResilientChatGroq(model_configs)
+
     tools = [fetch_live_product_roas, fetch_live_product_inventory, fetch_product_metrics, fetch_all_products_metrics]
-    
+
     prompt = ChatPromptTemplate.from_messages([
         ("system", """You are an elite, highly aggressive Senior Business Analyst & Strategist for a D2C brand named "Brew Boulevard". 
 Your job is to answer the user's questions strictly based on their real data.
@@ -174,7 +261,7 @@ Rules:
         ("human", "{input}"),
         ("placeholder", "{agent_scratchpad}"),
     ])
-    
+
     agent = create_tool_calling_agent(llm, tools, prompt)
     agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
     return agent_executor
