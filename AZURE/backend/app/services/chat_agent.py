@@ -138,8 +138,11 @@ def get_chat_agent():
         temperature=0.2,
         max_tokens=800
     )
+    fallback_api_key = os.getenv("FALLBACK_GROQ_API_KEY")
+    if not fallback_api_key:
+        fallback_api_key = api_key # fallback to primary api key if fallback api key is not set
     fallback = ChatGroq(
-        api_key=api_key,
+        api_key=fallback_api_key,
         model="llama-3.1-8b-instant",
         temperature=0.2,
         max_tokens=800
