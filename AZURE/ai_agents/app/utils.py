@@ -54,5 +54,5 @@ class FallbackChatGroq:
 def get_fallback_llm(api_key: str = None, temperature: float = 0.0) -> FallbackChatGroq:
     key = api_key or get_groq_api_key()
     primary = ChatGroq(api_key=key, model="llama-3.3-70b-versatile", temperature=temperature)
-    fallback = ChatGroq(api_key=key, model="llama3-8b-8192", temperature=temperature)
+    fallback = ChatGroq(api_key=key, model="llama-3.1-8b-instant", temperature=temperature)
     return FallbackChatGroq(primary, fallback)
