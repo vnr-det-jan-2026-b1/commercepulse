@@ -79,6 +79,27 @@ async def ai_chat(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/debug-tool", summary="Debug AI tools connection and status")
+async def debug_tool(seller_id: str = "c592fd56-c939-4448-92ef-930dea943e1d"):
+    from app.services.chat_agent import _get_backend_url, fetch_all_products_metrics
+    backend_url = _get_backend_url()
+    try:
+        res = fetch_all_products_metrics.invoke({"seller_id": seller_id})
+        return {
+            "status": "success",
+            "backend_url": backend_url,
+            "tool_response": res
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "status": "error",
+            "backend_url": backend_url,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+
 # ── Embed a single product snapshot ───────────────────────────
 @router.post("/embed/product", summary="Embed one product's daily performance summary (async via Celery)")
 async def embed_product(
