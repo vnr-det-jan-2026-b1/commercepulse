@@ -12,6 +12,17 @@ from app.db.session import get_db
 
 logger = logging.getLogger(__name__)
 
+import json
+from decimal import Decimal
+from datetime import date, datetime
+
+def _custom_json_encoder(obj):
+    if isinstance(obj, Decimal):
+        return float(obj)
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+
 
 # ── Tools ─────────────────────────────────────────────────────
 
@@ -57,7 +68,7 @@ async def fetch_product_metrics(product_id: str, seller_id: str) -> str:
         async with AsyncSessionLocal() as db:
             res = await product_metrics_detailed(product_id=product_id, seller_id=seller_id, db=db, _scope=seller_id)
             import json
-            return f"Live comprehensive product metrics: {json.dumps(res)}"
+            return f"Live comprehensive product metrics: {json.dumps(res, default=_custom_json_encoder)}"
     except Exception as e:
         return f"Could not fetch product metrics due to database error: {str(e)}."
 
@@ -73,7 +84,7 @@ async def fetch_all_products_metrics(seller_id: str) -> str:
         async with AsyncSessionLocal() as db:
             res = await products_list(seller_id=seller_id, db=db, _scope=seller_id)
             import json
-            return f"All products metrics: {json.dumps(res.get('data', []))}"
+            return f"All products metrics: {json.dumps(res.get('data', []), default=_custom_json_encoder)}"
     except Exception as e:
         return f"Could not fetch all products metrics due to database error: {str(e)}."
 
