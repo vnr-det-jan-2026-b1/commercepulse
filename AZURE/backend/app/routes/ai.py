@@ -64,7 +64,7 @@ async def ai_chat(
             chat_history.append(HumanMessage(content=msg.get("text", "")))
             
     try:
-        result = agent_executor.invoke({
+        result = await agent_executor.ainvoke({
             "input": request.message,
             "chat_history": chat_history,
             "context_str": context_str
@@ -81,20 +81,19 @@ async def ai_chat(
 
 @router.get("/debug-tool", summary="Debug AI tools connection and status")
 async def debug_tool(seller_id: str = "c592fd56-c939-4448-92ef-930dea943e1d"):
-    from app.services.chat_agent import _get_backend_url, fetch_all_products_metrics
-    backend_url = _get_backend_url()
+    from app.services.chat_agent import fetch_all_products_metrics
     try:
-        res = fetch_all_products_metrics.invoke({"seller_id": seller_id})
+        res = await fetch_all_products_metrics.ainvoke({"seller_id": seller_id})
         return {
             "status": "success",
-            "backend_url": backend_url,
+            "backend_url": "database-direct",
             "tool_response": res
         }
     except Exception as e:
         import traceback
         return {
             "status": "error",
-            "backend_url": backend_url,
+            "backend_url": "database-direct",
             "error": str(e),
             "traceback": traceback.format_exc()
         }

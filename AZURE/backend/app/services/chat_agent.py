@@ -12,110 +12,70 @@ from app.db.session import get_db
 
 logger = logging.getLogger(__name__)
 
-_DETECTED_BACKEND_URL = None
-
-def _get_backend_url() -> str:
-    global _DETECTED_BACKEND_URL
-    if _DETECTED_BACKEND_URL is not None:
-        return _DETECTED_BACKEND_URL
-
-    env_url = os.getenv("BACKEND_API_URL")
-    if env_url:
-        _DETECTED_BACKEND_URL = env_url.rstrip("/")
-        return _DETECTED_BACKEND_URL
-
-    # Probe ports in order of likelihood
-    import httpx
-    for port in [7860, 8000, 8010]:
-        test_url = f"http://127.0.0.1:{port}"
-        try:
-            response = httpx.get(f"{test_url}/health", timeout=0.5)
-            if response.status_code == 200:
-                _DETECTED_BACKEND_URL = test_url
-                logger.info(f"[Chat] Detected backend URL: {_DETECTED_BACKEND_URL}")
-                return _DETECTED_BACKEND_URL
-        except Exception:
-            pass
-
-    _DETECTED_BACKEND_URL = "http://127.0.0.1:7860"
-    return _DETECTED_BACKEND_URL
-
 
 # ── Tools ─────────────────────────────────────────────────────
 
 @tool
-def fetch_live_product_roas(product_id: str) -> str:
+async def fetch_live_product_roas(product_id: str) -> str:
     """
     Fetches the live, mathematically exact ROAS (Return on Ad Spend) for a specific product.
     Use this tool to verify ROAS numbers.
     """
-    import httpx
-    backend_url = _get_backend_url()
-    url = f"{backend_url}/analytics/product/{product_id}/roas"
+    from app.routes.analytics import product_roas
+    from app.db.session import AsyncSessionLocal
     try:
-        response = httpx.get(url, timeout=5.0)
-        response.raise_for_status()
-        data = response.json()
-        return f"Live ROAS for {product_id} is {data.get('roas', 'unknown')}. Total Spend: {data.get('total_spend', 'unknown')}."
+        async with AsyncSessionLocal() as db:
+            res = await product_roas(product_id=product_id, db=db)
+            return f"Live ROAS for {product_id} is {res.get('roas', 'unknown')}. Total Spend: {res.get('total_spend', 'unknown')}."
     except Exception as e:
-        return f"Could not verify live ROAS due to API error: {str(e)}."
+        return f"Could not verify live ROAS due to database error: {str(e)}."
 
 @tool
-def fetch_live_product_inventory(product_id: str) -> str:
+async def fetch_live_product_inventory(product_id: str) -> str:
     """
     Fetches the live inventory count for a specific product.
     Use this tool to verify if a product is actually out of stock.
     """
-    import httpx
-    backend_url = _get_backend_url()
-    url = f"{backend_url}/analytics/inventory/{product_id}"
+    from app.routes.analytics import product_inventory
+    from app.db.session import AsyncSessionLocal
     try:
-        response = httpx.get(url, timeout=5.0)
-        response.raise_for_status()
-        data = response.json()
-        return f"Live inventory for {product_id} is {data.get('available_stock', 'unknown')} units."
+        async with AsyncSessionLocal() as db:
+            res = await product_inventory(product_id=product_id, db=db)
+            return f"Live inventory for {product_id} is {res.get('available_stock', 'unknown')} units."
     except Exception as e:
-        return f"Could not verify live inventory due to API error: {str(e)}."
+        return f"Could not verify live inventory due to database error: {str(e)}."
 
 @tool
-def fetch_product_metrics(product_id: str, seller_id: str) -> str:
+async def fetch_product_metrics(product_id: str, seller_id: str) -> str:
     """
     Fetches comprehensive deep live metrics (like Revenue, AOV, ROAS, Returns, Units Sold, Delivery Days) for a specific product.
     Requires product_id and seller_id.
     """
-    import httpx
-    backend_url = _get_backend_url()
-    url = f"{backend_url}/analytics/product/{product_id}/metrics?seller_id={seller_id}"
+    from app.routes.analytics import product_metrics_detailed
+    from app.db.session import AsyncSessionLocal
     try:
-        response = httpx.get(url, timeout=5.0)
-        if response.status_code == 404:
-            return "Product not found."
-        response.raise_for_status()
-        data = response.json()
-        import json
-        return f"Live comprehensive product metrics: {json.dumps(data)}"
+        async with AsyncSessionLocal() as db:
+            res = await product_metrics_detailed(product_id=product_id, seller_id=seller_id, db=db, _scope=seller_id)
+            import json
+            return f"Live comprehensive product metrics: {json.dumps(res)}"
     except Exception as e:
-        return f"Could not fetch product metrics due to API error: {str(e)}."
+        return f"Could not fetch product metrics due to database error: {str(e)}."
 
 @tool
-def fetch_all_products_metrics(seller_id: str) -> str:
+async def fetch_all_products_metrics(seller_id: str) -> str:
     """
     Fetches the metrics for all products owned by the seller, including product ID, name, SKU, total revenue, total orders, ROAS, and inventory stock level.
     Use this tool when the user asks about top-selling products, best performers, general product performance, or lists of products.
     """
-    import httpx
-    backend_url = _get_backend_url()
-    url = f"{backend_url}/analytics/products/list?seller_id={seller_id}"
+    from app.routes.analytics import products_list
+    from app.db.session import AsyncSessionLocal
     try:
-        response = httpx.get(url, timeout=5.0)
-        if response.status_code == 404:
-            return "Seller or products not found."
-        response.raise_for_status()
-        data = response.json()
-        import json
-        return f"All products metrics: {json.dumps(data.get('data', []))}"
+        async with AsyncSessionLocal() as db:
+            res = await products_list(seller_id=seller_id, db=db, _scope=seller_id)
+            import json
+            return f"All products metrics: {json.dumps(res.get('data', []))}"
     except Exception as e:
-        return f"Could not fetch all products metrics due to API error: {str(e)}."
+        return f"Could not fetch all products metrics due to database error: {str(e)}."
 
 
 # ── Multi-Key Resilient Fallback System ───────────────────────
