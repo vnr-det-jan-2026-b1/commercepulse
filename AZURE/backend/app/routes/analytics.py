@@ -623,15 +623,18 @@ async def products_list(
     result = await db.execute(sql, {"seller_id": seller_id})
     rows = result.mappings().all()
     
-    # Process rows to ensure JSON objects are parsed properly (if any) and handle UUIDs
+    # Process rows to ensure JSON-safe types (convert Decimal/UUID/date)
+    from decimal import Decimal as _Dec
     processed_rows = []
     for r in rows:
         d = dict(r)
         d['product_id'] = str(d['product_id'])
-        if d['last_analyzed']:
+        if d.get('last_analyzed'):
             d['last_analyzed'] = str(d['last_analyzed'])
-        if d['health_score']:
-            d['health_score'] = float(d['health_score'])
+        # Convert all Decimal fields to float for JSON safety
+        for key in ('total_revenue', 'total_orders', 'margin_pct', 'stock_level', 'roas', 'health_score'):
+            if key in d and d[key] is not None:
+                d[key] = float(d[key]) if isinstance(d[key], _Dec) else d[key]
         processed_rows.append(d)
         
     return {"seller_id": seller_id, "data": processed_rows}
